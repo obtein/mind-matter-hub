@@ -8,7 +8,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Plus, Search, User, Phone, Trash2, Edit, Loader2, ChevronRight, MapPin, IdCard } from "lucide-react";
+import { Plus, Search, User, Phone, Trash2, Edit, Loader2, ChevronRight, MapPin, IdCard, Calendar } from "lucide-react";
+import { format } from "date-fns";
+import { tr } from "date-fns/locale";
 
 interface Patient {
   id: string;
@@ -22,6 +24,7 @@ interface Patient {
   tc_identity: string | null;
   notes: string | null;
   created_at: string;
+  last_appointment?: string | null;
 }
 
 interface PatientsViewProps {
@@ -53,13 +56,33 @@ export const PatientsView = ({ onPatientSelect }: PatientsViewProps) => {
 
   const fetchPatients = async () => {
     try {
-      const { data, error } = await supabase
+      // Fetch patients with their last appointment
+      const { data: patientsData, error: patientsError } = await supabase
         .from("patients")
         .select("*")
         .order("created_at", { ascending: false });
 
-      if (error) throw error;
-      setPatients(data || []);
+      if (patientsError) throw patientsError;
+
+      // Fetch last appointment for each patient
+      const patientsWithAppointments = await Promise.all(
+        (patientsData || []).map(async (patient) => {
+          const { data: appointmentData } = await supabase
+            .from("appointments")
+            .select("appointment_date")
+            .eq("patient_id", patient.id)
+            .order("appointment_date", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          return {
+            ...patient,
+            last_appointment: appointmentData?.appointment_date || null,
+          };
+        })
+      );
+
+      setPatients(patientsWithAppointments);
     } catch (error: any) {
       toast.error("Hastalar yüklenemedi");
     } finally {
@@ -439,6 +462,12 @@ export const PatientsView = ({ onPatientSelect }: PatientsViewProps) => {
                   <div className="flex items-center gap-2 text-muted-foreground">
                     <MapPin className="w-4 h-4" />
                     <span className="truncate">{patient.address}</span>
+                  </div>
+                )}
+                {patient.last_appointment && (
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <Calendar className="w-4 h-4" />
+                    <span>Son: {format(new Date(patient.last_appointment), "d MMM yyyy", { locale: tr })}</span>
                   </div>
                 )}
                 <div className="flex gap-1 pt-2 border-t opacity-0 group-hover:opacity-100 transition-opacity">
