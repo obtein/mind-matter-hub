@@ -237,7 +237,7 @@ export const AppointmentDetailView = ({ appointmentId, patientId, onBack }: Appo
 
       const doctorName = profile?.full_name || "Doktor";
 
-      generatePrescriptionPdf({
+      await generatePrescriptionPdf({
         patientName: patient?.full_name || "",
         appointmentDate: format(new Date(appointment!.appointment_date), "d MMMM yyyy", { locale: tr }),
         doctorName,
