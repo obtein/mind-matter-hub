@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { ArrowLeft, Plus, Pill, Save, Calendar, Clock, Trash2, Loader2, FileText, CheckCircle, XCircle, Download } from "lucide-react";
+import { ArrowLeft, Plus, Pill, Save, Calendar, Clock, Trash2, Loader2, FileText, CheckCircle, XCircle, Download, Bell } from "lucide-react";
 import { format } from "date-fns";
 import { tr } from "date-fns/locale";
 import { checkAppointmentConflict } from "@/lib/appointmentUtils";
@@ -63,6 +63,7 @@ export const AppointmentDetailView = ({ appointmentId, patientId, onBack }: Appo
     appointment_time: "09:00",
     duration_minutes: "60",
     notes: "",
+    reminder_time: "1_day",
   });
 
   useEffect(() => {
@@ -204,15 +205,34 @@ export const AppointmentDetailView = ({ appointmentId, patientId, onBack }: Appo
         return;
       }
 
-      const { error } = await supabase.from("appointments").insert({
+      const { data: appointmentData, error } = await supabase.from("appointments").insert({
         doctor_id: user.id,
         patient_id: patientId,
         appointment_date: appointmentDateTime.toISOString(),
         duration_minutes: durationMinutes,
         notes: newAppointmentForm.notes || null,
-      });
+      }).select().single();
 
       if (error) throw error;
+
+      // Create reminder if selected
+      if (newAppointmentForm.reminder_time !== "none" && appointmentData) {
+        const reminderOffsets: Record<string, number> = {
+          "1_hour": 60 * 60 * 1000,
+          "3_hours": 3 * 60 * 60 * 1000,
+          "1_day": 24 * 60 * 60 * 1000,
+          "2_days": 2 * 24 * 60 * 60 * 1000,
+        };
+
+        const offset = reminderOffsets[newAppointmentForm.reminder_time] || 24 * 60 * 60 * 1000;
+        const reminderTime = new Date(appointmentDateTime.getTime() - offset);
+
+        await supabase.from("appointment_reminders").insert({
+          appointment_id: appointmentData.id,
+          reminder_type: "in_app",
+          reminder_time: reminderTime.toISOString(),
+        });
+      }
 
       toast.success("Yeni randevu oluşturuldu");
       setIsNewAppointmentDialogOpen(false);
@@ -221,6 +241,7 @@ export const AppointmentDetailView = ({ appointmentId, patientId, onBack }: Appo
         appointment_time: "09:00",
         duration_minutes: "60",
         notes: "",
+        reminder_time: "1_day",
       });
     } catch (error: any) {
       toast.error("Randevu oluşturulamadı");
@@ -353,6 +374,27 @@ export const AppointmentDetailView = ({ appointmentId, patientId, onBack }: Appo
                   )}
                 </div>
               )}
+              <div className="space-y-2">
+                <Label htmlFor="apt_reminder">Hatırlatma</Label>
+                <Select
+                  value={newAppointmentForm.reminder_time}
+                  onValueChange={(value) => setNewAppointmentForm({ ...newAppointmentForm, reminder_time: value })}
+                >
+                  <SelectTrigger>
+                    <div className="flex items-center gap-2">
+                      <Bell className="w-4 h-4" />
+                      <SelectValue />
+                    </div>
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Hatırlatma yok</SelectItem>
+                    <SelectItem value="1_hour">1 saat önce</SelectItem>
+                    <SelectItem value="3_hours">3 saat önce</SelectItem>
+                    <SelectItem value="1_day">1 gün önce</SelectItem>
+                    <SelectItem value="2_days">2 gün önce</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
               <div className="space-y-2">
                 <Label htmlFor="apt_notes">Randevu Notu</Label>
                 <Textarea

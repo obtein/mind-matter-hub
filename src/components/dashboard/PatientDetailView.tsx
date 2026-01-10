@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { ArrowLeft, Plus, User, Phone, Mail, MapPin, IdCard, Calendar, FileText, Trash2, ChevronRight, Loader2, Clock, Pill, Search, X, Activity, CalendarDays, CalendarCheck, CalendarClock, Timer } from "lucide-react";
+import { ArrowLeft, Plus, User, Phone, Mail, MapPin, IdCard, Calendar, FileText, Trash2, ChevronRight, Loader2, Clock, Pill, Search, X, Activity, CalendarDays, CalendarCheck, CalendarClock, Timer, Bell } from "lucide-react";
 import { format } from "date-fns";
 import { tr } from "date-fns/locale";
 import { checkAppointmentConflict } from "@/lib/appointmentUtils";
@@ -64,6 +64,7 @@ export const PatientDetailView = ({ patientId, onBack, onAppointmentSelect }: Pa
     appointment_time: "09:00",
     duration_minutes: "60",
     notes: "",
+    reminder_time: "1_day", // Options: none, 1_hour, 3_hours, 1_day, 2_days
   });
 
   useEffect(() => {
@@ -197,15 +198,34 @@ export const PatientDetailView = ({ patientId, onBack, onAppointmentSelect }: Pa
         return;
       }
 
-      const { error } = await supabase.from("appointments").insert({
+      const { data: appointmentData, error } = await supabase.from("appointments").insert({
         patient_id: patientId,
         doctor_id: user.id,
         appointment_date: appointmentDateTime.toISOString(),
         duration_minutes: durationMinutes,
         notes: formData.notes || null,
-      });
+      }).select().single();
 
       if (error) throw error;
+
+      // Create reminder if selected
+      if (formData.reminder_time !== "none" && appointmentData) {
+        const reminderOffsets: Record<string, number> = {
+          "1_hour": 60 * 60 * 1000,
+          "3_hours": 3 * 60 * 60 * 1000,
+          "1_day": 24 * 60 * 60 * 1000,
+          "2_days": 2 * 24 * 60 * 60 * 1000,
+        };
+
+        const offset = reminderOffsets[formData.reminder_time] || 24 * 60 * 60 * 1000;
+        const reminderTime = new Date(appointmentDateTime.getTime() - offset);
+
+        await supabase.from("appointment_reminders").insert({
+          appointment_id: appointmentData.id,
+          reminder_type: "in_app",
+          reminder_time: reminderTime.toISOString(),
+        });
+      }
 
       toast.success("Randevu oluşturuldu");
       setIsDialogOpen(false);
@@ -214,6 +234,7 @@ export const PatientDetailView = ({ patientId, onBack, onAppointmentSelect }: Pa
         appointment_time: "09:00",
         duration_minutes: "60",
         notes: "",
+        reminder_time: "1_day",
       });
       fetchData();
     } catch (error: any) {
@@ -726,6 +747,27 @@ export const PatientDetailView = ({ patientId, onBack, onAppointmentSelect }: Pa
                     )}
                   </div>
                 )}
+                <div className="space-y-2">
+                  <Label htmlFor="reminder">Hatırlatma</Label>
+                  <Select
+                    value={formData.reminder_time}
+                    onValueChange={(value) => setFormData({ ...formData, reminder_time: value })}
+                  >
+                    <SelectTrigger>
+                      <div className="flex items-center gap-2">
+                        <Bell className="w-4 h-4" />
+                        <SelectValue />
+                      </div>
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Hatırlatma yok</SelectItem>
+                      <SelectItem value="1_hour">1 saat önce</SelectItem>
+                      <SelectItem value="3_hours">3 saat önce</SelectItem>
+                      <SelectItem value="1_day">1 gün önce</SelectItem>
+                      <SelectItem value="2_days">2 gün önce</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
                 <div className="space-y-2">
                   <Label htmlFor="notes">Randevu Notu</Label>
                   <Textarea
