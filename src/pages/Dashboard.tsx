@@ -5,16 +5,16 @@ import { DashboardSidebar } from "@/components/dashboard/DashboardSidebar";
 import { PatientsView } from "@/components/dashboard/PatientsView";
 import { DailyScheduleView } from "@/components/dashboard/DailyScheduleView";
 import { PatientDetailView } from "@/components/dashboard/PatientDetailView";
-import { SessionDetailView } from "@/components/dashboard/SessionDetailView";
+import { AppointmentDetailView } from "@/components/dashboard/AppointmentDetailView";
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
 import type { User } from "@supabase/supabase-js";
 
-export type ViewType = "schedule" | "patients" | "patient-detail" | "session-detail";
+export type ViewType = "schedule" | "patients" | "patient-detail" | "appointment-detail";
 
 export interface ViewState {
   type: ViewType;
   patientId?: string;
-  sessionId?: string;
+  appointmentId?: string;
 }
 
 const Dashboard = () => {
@@ -77,12 +77,12 @@ const Dashboard = () => {
               <PatientDetailView 
                 patientId={viewState.patientId}
                 onBack={() => navigateTo({ type: "patients" })}
-                onSessionSelect={(sessionId) => navigateTo({ type: "session-detail", patientId: viewState.patientId, sessionId })}
+                onAppointmentSelect={(appointmentId) => navigateTo({ type: "appointment-detail", patientId: viewState.patientId, appointmentId })}
               />
             )}
-            {viewState.type === "session-detail" && viewState.sessionId && viewState.patientId && (
-              <SessionDetailView
-                sessionId={viewState.sessionId}
+            {viewState.type === "appointment-detail" && viewState.appointmentId && viewState.patientId && (
+              <AppointmentDetailView
+                appointmentId={viewState.appointmentId}
                 patientId={viewState.patientId}
                 onBack={() => navigateTo({ type: "patient-detail", patientId: viewState.patientId })}
               />
