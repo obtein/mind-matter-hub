@@ -50,6 +50,8 @@ export const AppointmentDetailView = ({ appointmentId, patientId, onBack }: Appo
   const [status, setStatus] = useState("scheduled");
   const [isMedicationDialogOpen, setIsMedicationDialogOpen] = useState(false);
   const [isNewAppointmentDialogOpen, setIsNewAppointmentDialogOpen] = useState(false);
+  const [conflictWarning, setConflictWarning] = useState<string | null>(null);
+  const [checkingConflict, setCheckingConflict] = useState(false);
   const [medicationForm, setMedicationForm] = useState({
     medication_name: "",
     dosage: "",
@@ -65,6 +67,42 @@ export const AppointmentDetailView = ({ appointmentId, patientId, onBack }: Appo
   useEffect(() => {
     fetchData();
   }, [appointmentId]);
+
+  // Real-time conflict check for new appointment
+  useEffect(() => {
+    const checkConflict = async () => {
+      if (!newAppointmentForm.appointment_date || !newAppointmentForm.appointment_time) {
+        setConflictWarning(null);
+        return;
+      }
+
+      setCheckingConflict(true);
+      try {
+        const appointmentDateTime = new Date(
+          `${newAppointmentForm.appointment_date}T${newAppointmentForm.appointment_time}`
+        );
+        const durationMinutes = parseInt(newAppointmentForm.duration_minutes);
+
+        const { hasConflict, conflictingPatient } = await checkAppointmentConflict(
+          appointmentDateTime,
+          durationMinutes
+        );
+
+        if (hasConflict) {
+          setConflictWarning(`Bu saatte ${conflictingPatient} ile çakışan randevu var!`);
+        } else {
+          setConflictWarning(null);
+        }
+      } catch (error) {
+        console.error("Conflict check error:", error);
+      } finally {
+        setCheckingConflict(false);
+      }
+    };
+
+    const debounce = setTimeout(checkConflict, 300);
+    return () => clearTimeout(debounce);
+  }, [newAppointmentForm.appointment_date, newAppointmentForm.appointment_time, newAppointmentForm.duration_minutes]);
 
   const fetchData = async () => {
     try {
@@ -271,6 +309,26 @@ export const AppointmentDetailView = ({ appointmentId, patientId, onBack }: Appo
                   </SelectContent>
                 </Select>
               </div>
+              {/* Conflict Warning */}
+              {(conflictWarning || checkingConflict) && (
+                <div className={`flex items-center gap-2 p-3 rounded-lg text-sm ${
+                  checkingConflict 
+                    ? "bg-muted text-muted-foreground" 
+                    : "bg-destructive/10 text-destructive border border-destructive/20"
+                }`}>
+                  {checkingConflict ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Kontrol ediliyor...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Calendar className="w-4 h-4" />
+                      <span>{conflictWarning}</span>
+                    </>
+                  )}
+                </div>
+              )}
               <div className="space-y-2">
                 <Label htmlFor="apt_notes">Randevu Notu</Label>
                 <Textarea
@@ -280,7 +338,7 @@ export const AppointmentDetailView = ({ appointmentId, patientId, onBack }: Appo
                   rows={2}
                 />
               </div>
-              <Button type="submit" className="w-full">
+              <Button type="submit" className="w-full" disabled={!!conflictWarning || checkingConflict}>
                 Randevu Oluştur
               </Button>
             </form>
