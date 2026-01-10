@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
 import { Users, Calendar, TrendingUp, UserCheck, Loader2 } from "lucide-react";
 import { format, subMonths, startOfMonth, endOfMonth } from "date-fns";
+import { handleError } from "@/lib/errorHandler";
 import { tr } from "date-fns/locale";
 import {
   BarChart,
@@ -132,8 +133,8 @@ export const StatisticsView = () => {
         ageDistribution,
         monthlyAppointments,
       });
-    } catch (error: any) {
-      toast.error("İstatistikler yüklenemedi");
+    } catch (error: unknown) {
+      toast.error(handleError(error, "İstatistikler yüklenemedi"));
     } finally {
       setLoading(false);
     }

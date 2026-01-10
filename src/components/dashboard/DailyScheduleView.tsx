@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "sonner";
 import { ChevronLeft, ChevronRight, Clock, User, Loader2 } from "lucide-react";
+import { handleError } from "@/lib/errorHandler";
 import { format, addDays, subDays, isSameDay, parseISO } from "date-fns";
 import { tr } from "date-fns/locale";
 import { MonthlyCalendar } from "./MonthlyCalendar";
@@ -51,8 +52,8 @@ export const DailyScheduleView = ({ onAppointmentSelect }: DailyScheduleViewProp
 
       if (error) throw error;
       setAppointments(data || []);
-    } catch (error: any) {
-      toast.error("Randevular yüklenemedi");
+    } catch (error: unknown) {
+      toast.error(handleError(error, "Randevular yüklenemedi"));
     } finally {
       setLoading(false);
     }
