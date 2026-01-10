@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import { ArrowLeft, Plus, User, Phone, Mail, MapPin, IdCard, Calendar, FileText, Trash2, ChevronRight, Loader2, Clock } from "lucide-react";
 import { format } from "date-fns";
 import { tr } from "date-fns/locale";
+import { checkAppointmentConflict } from "@/lib/appointmentUtils";
 
 interface Patient {
   id: string;
@@ -93,12 +94,24 @@ export const PatientDetailView = ({ patientId, onBack, onAppointmentSelect }: Pa
       const appointmentDateTime = new Date(
         `${formData.appointment_date}T${formData.appointment_time}`
       );
+      const durationMinutes = parseInt(formData.duration_minutes);
+
+      // Check for conflicts
+      const { hasConflict, conflictingPatient } = await checkAppointmentConflict(
+        appointmentDateTime,
+        durationMinutes
+      );
+
+      if (hasConflict) {
+        toast.error(`Bu saatte ${conflictingPatient} ile çakışan bir randevu var!`);
+        return;
+      }
 
       const { error } = await supabase.from("appointments").insert({
         patient_id: patientId,
         doctor_id: user.id,
         appointment_date: appointmentDateTime.toISOString(),
-        duration_minutes: parseInt(formData.duration_minutes),
+        duration_minutes: durationMinutes,
         notes: formData.notes || null,
       });
 
