@@ -1,0 +1,272 @@
+import { useState, useEffect } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { Button } from "@/components/ui/button";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Bell, Check, Trash2, Calendar, AlertCircle, Info, CheckCircle } from "lucide-react";
+import { format, formatDistanceToNow } from "date-fns";
+import { tr } from "date-fns/locale";
+import { toast } from "sonner";
+
+interface Notification {
+  id: string;
+  title: string;
+  message: string;
+  type: string;
+  is_read: boolean;
+  created_at: string;
+  related_appointment_id: string | null;
+  related_patient_id: string | null;
+}
+
+export const NotificationBell = () => {
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [isOpen, setIsOpen] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchNotifications();
+    checkUpcomingAppointments();
+
+    // Set up real-time subscription
+    const channel = supabase
+      .channel('notifications')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'notifications',
+        },
+        () => {
+          fetchNotifications();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
+  const fetchNotifications = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("notifications")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .limit(20);
+
+      if (error) throw error;
+
+      setNotifications(data || []);
+      setUnreadCount(data?.filter((n) => !n.is_read).length || 0);
+    } catch (error) {
+      console.error("Error fetching notifications:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const checkUpcomingAppointments = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // Get appointments in the next 24 hours
+      const now = new Date();
+      const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+
+      const { data: appointments, error } = await supabase
+        .from("appointments")
+        .select(`
+          id,
+          appointment_date,
+          patients:patient_id (full_name)
+        `)
+        .eq("status", "scheduled")
+        .gte("appointment_date", now.toISOString())
+        .lte("appointment_date", tomorrow.toISOString())
+        .order("appointment_date", { ascending: true });
+
+      if (error) throw error;
+
+      // Check if we already have notifications for these appointments
+      const { data: existingNotifications } = await supabase
+        .from("notifications")
+        .select("related_appointment_id")
+        .in("related_appointment_id", appointments?.map((a) => a.id) || []);
+
+      const existingAppointmentIds = new Set(
+        existingNotifications?.map((n) => n.related_appointment_id) || []
+      );
+
+      // Create notifications for upcoming appointments that don't have one
+      for (const apt of appointments || []) {
+        if (!existingAppointmentIds.has(apt.id)) {
+          const patientName = (apt.patients as any)?.full_name || "Hasta";
+          const aptTime = format(new Date(apt.appointment_date), "HH:mm", { locale: tr });
+          const aptDate = format(new Date(apt.appointment_date), "d MMMM", { locale: tr });
+
+          await supabase.from("notifications").insert({
+            user_id: user.id,
+            title: "Yaklaşan Randevu",
+            message: `${patientName} - ${aptDate} saat ${aptTime}`,
+            type: "reminder",
+            related_appointment_id: apt.id,
+          });
+        }
+      }
+
+      fetchNotifications();
+    } catch (error) {
+      console.error("Error checking upcoming appointments:", error);
+    }
+  };
+
+  const markAsRead = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from("notifications")
+        .update({ is_read: true })
+        .eq("id", id);
+
+      if (error) throw error;
+      fetchNotifications();
+    } catch (error) {
+      console.error("Error marking notification as read:", error);
+    }
+  };
+
+  const markAllAsRead = async () => {
+    try {
+      const { error } = await supabase
+        .from("notifications")
+        .update({ is_read: true })
+        .eq("is_read", false);
+
+      if (error) throw error;
+      toast.success("Tüm bildirimler okundu olarak işaretlendi");
+      fetchNotifications();
+    } catch (error) {
+      toast.error("İşlem başarısız");
+    }
+  };
+
+  const deleteNotification = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from("notifications")
+        .delete()
+        .eq("id", id);
+
+      if (error) throw error;
+      fetchNotifications();
+    } catch (error) {
+      toast.error("Bildirim silinemedi");
+    }
+  };
+
+  const getTypeIcon = (type: string) => {
+    switch (type) {
+      case "reminder":
+        return <Calendar className="w-4 h-4 text-blue-500" />;
+      case "warning":
+        return <AlertCircle className="w-4 h-4 text-amber-500" />;
+      case "success":
+        return <CheckCircle className="w-4 h-4 text-green-500" />;
+      default:
+        return <Info className="w-4 h-4 text-primary" />;
+    }
+  };
+
+  return (
+    <Popover open={isOpen} onOpenChange={setIsOpen}>
+      <PopoverTrigger asChild>
+        <Button variant="ghost" size="icon" className="relative">
+          <Bell className="w-5 h-5" />
+          {unreadCount > 0 && (
+            <span className="absolute -top-1 -right-1 w-5 h-5 bg-destructive text-destructive-foreground text-xs font-bold rounded-full flex items-center justify-center">
+              {unreadCount > 9 ? "9+" : unreadCount}
+            </span>
+          )}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-80 p-0" align="end">
+        <div className="flex items-center justify-between p-4 border-b">
+          <h3 className="font-semibold">Bildirimler</h3>
+          {unreadCount > 0 && (
+            <Button variant="ghost" size="sm" onClick={markAllAsRead}>
+              <Check className="w-4 h-4 mr-1" />
+              Tümünü Oku
+            </Button>
+          )}
+        </div>
+        <ScrollArea className="h-[300px]">
+          {notifications.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
+              <Bell className="w-10 h-10 mb-2 opacity-30" />
+              <p className="text-sm">Bildirim yok</p>
+            </div>
+          ) : (
+            <div className="divide-y">
+              {notifications.map((notification) => (
+                <div
+                  key={notification.id}
+                  className={`p-3 hover:bg-muted/50 transition-colors ${
+                    !notification.is_read ? "bg-primary/5" : ""
+                  }`}
+                >
+                  <div className="flex items-start gap-3">
+                    <div className="mt-0.5">{getTypeIcon(notification.type)}</div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className={`text-sm font-medium truncate ${!notification.is_read ? "text-foreground" : "text-muted-foreground"}`}>
+                          {notification.title}
+                        </p>
+                        <div className="flex items-center gap-1 flex-shrink-0">
+                          {!notification.is_read && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="w-6 h-6"
+                              onClick={() => markAsRead(notification.id)}
+                            >
+                              <Check className="w-3 h-3" />
+                            </Button>
+                          )}
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="w-6 h-6 text-muted-foreground hover:text-destructive"
+                            onClick={() => deleteNotification(notification.id)}
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </Button>
+                        </div>
+                      </div>
+                      <p className="text-sm text-muted-foreground line-clamp-2">
+                        {notification.message}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {formatDistanceToNow(new Date(notification.created_at), {
+                          addSuffix: true,
+                          locale: tr,
+                        })}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </ScrollArea>
+      </PopoverContent>
+    </Popover>
+  );
+};
