@@ -1,4 +1,4 @@
-import { Brain, Users, Calendar, LogOut, BarChart3 } from "lucide-react";
+import { Brain, Users, Calendar, LogOut, BarChart3, Pill } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import type { ViewState } from "@/pages/Dashboard";
@@ -25,6 +25,7 @@ interface DashboardSidebarProps {
 const menuItems = [
   { type: "schedule" as const, label: "Günlük Randevular", icon: Calendar },
   { type: "patients" as const, label: "Hastalar", icon: Users },
+  { type: "medications" as const, label: "İlaç Raporu", icon: Pill },
   { type: "statistics" as const, label: "İstatistikler", icon: BarChart3 },
 ];
 

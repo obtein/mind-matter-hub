@@ -7,10 +7,11 @@ import { DailyScheduleView } from "@/components/dashboard/DailyScheduleView";
 import { PatientDetailView } from "@/components/dashboard/PatientDetailView";
 import { AppointmentDetailView } from "@/components/dashboard/AppointmentDetailView";
 import { StatisticsView } from "@/components/dashboard/StatisticsView";
+import { MedicationsReportView } from "@/components/dashboard/MedicationsReportView";
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
 import type { User } from "@supabase/supabase-js";
 
-export type ViewType = "schedule" | "patients" | "patient-detail" | "appointment-detail" | "statistics";
+export type ViewType = "schedule" | "patients" | "patient-detail" | "appointment-detail" | "statistics" | "medications";
 
 export interface ViewState {
   type: ViewType;
@@ -95,6 +96,7 @@ const Dashboard = () => {
               />
             )}
             {viewState.type === "statistics" && <StatisticsView />}
+            {viewState.type === "medications" && <MedicationsReportView />}
           </main>
         </SidebarInset>
       </div>
