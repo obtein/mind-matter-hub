@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { ArrowLeft, Plus, User, Phone, Mail, MapPin, IdCard, Calendar, FileText, Trash2, ChevronRight, Loader2, Clock, Pill, Search, X } from "lucide-react";
+import { ArrowLeft, Plus, User, Phone, Mail, MapPin, IdCard, Calendar, FileText, Trash2, ChevronRight, Loader2, Clock, Pill, Search, X, Activity, CalendarDays, CalendarCheck, CalendarClock } from "lucide-react";
 import { format } from "date-fns";
 import { tr } from "date-fns/locale";
 import { checkAppointmentConflict } from "@/lib/appointmentUtils";
@@ -379,6 +379,146 @@ export const PatientDetailView = ({ patientId, onBack, onAppointmentSelect }: Pa
               <p className="text-sm">{patient.notes}</p>
             </div>
           )}
+        </CardContent>
+      </Card>
+
+      {/* Patient Summary Card */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Activity className="w-5 h-5 text-primary" />
+            Hasta Özeti
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {(() => {
+            const completedAppointments = appointments.filter(a => a.status === "completed");
+            const scheduledAppointments = appointments.filter(a => a.status === "scheduled" && new Date(a.appointment_date) > new Date());
+            const pastAppointments = appointments.filter(a => new Date(a.appointment_date) <= new Date());
+            
+            // First visit date
+            const firstVisit = appointments.length > 0 
+              ? appointments[appointments.length - 1] 
+              : null;
+            
+            // Last visit date (completed)
+            const lastCompletedVisit = completedAppointments.length > 0 
+              ? completedAppointments[0] 
+              : null;
+            
+            // Next scheduled appointment
+            const nextAppointment = scheduledAppointments.length > 0 
+              ? scheduledAppointments.sort((a, b) => new Date(a.appointment_date).getTime() - new Date(b.appointment_date).getTime())[0]
+              : null;
+            
+            // Last prescription date
+            const lastPrescriptionDate = medications.length > 0 && medications[0].appointment_date
+              ? medications[0].appointment_date 
+              : null;
+            
+            // Visit frequency calculation (average days between visits)
+            let visitFrequency = "";
+            if (completedAppointments.length >= 2) {
+              const sortedVisits = completedAppointments.sort((a, b) => 
+                new Date(a.appointment_date).getTime() - new Date(b.appointment_date).getTime()
+              );
+              let totalDays = 0;
+              for (let i = 1; i < sortedVisits.length; i++) {
+                const diff = new Date(sortedVisits[i].appointment_date).getTime() - new Date(sortedVisits[i-1].appointment_date).getTime();
+                totalDays += diff / (1000 * 60 * 60 * 24);
+              }
+              const avgDays = Math.round(totalDays / (sortedVisits.length - 1));
+              if (avgDays < 7) {
+                visitFrequency = `Haftada ${Math.round(7 / avgDays)} kez`;
+              } else if (avgDays < 30) {
+                visitFrequency = `${Math.round(avgDays / 7)} haftada bir`;
+              } else {
+                visitFrequency = `${Math.round(avgDays / 30)} ayda bir`;
+              }
+            }
+
+            return (
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
+                  <div className="w-10 h-10 rounded-full bg-blue-500/10 flex items-center justify-center">
+                    <CalendarCheck className="w-5 h-5 text-blue-500" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Toplam Seans</p>
+                    <p className="font-semibold">{completedAppointments.length} tamamlandı</p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
+                  <div className="w-10 h-10 rounded-full bg-green-500/10 flex items-center justify-center">
+                    <CalendarDays className="w-5 h-5 text-green-500" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">İlk Geliş</p>
+                    <p className="font-semibold">
+                      {firstVisit 
+                        ? format(new Date(firstVisit.appointment_date), "d MMMM yyyy", { locale: tr })
+                        : "Henüz randevu yok"}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
+                  <div className="w-10 h-10 rounded-full bg-orange-500/10 flex items-center justify-center">
+                    <Clock className="w-5 h-5 text-orange-500" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Son Geliş</p>
+                    <p className="font-semibold">
+                      {lastCompletedVisit 
+                        ? format(new Date(lastCompletedVisit.appointment_date), "d MMMM yyyy", { locale: tr })
+                        : "Henüz tamamlanan seans yok"}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
+                  <div className="w-10 h-10 rounded-full bg-purple-500/10 flex items-center justify-center">
+                    <CalendarClock className="w-5 h-5 text-purple-500" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Sonraki Randevu</p>
+                    <p className="font-semibold">
+                      {nextAppointment 
+                        ? format(new Date(nextAppointment.appointment_date), "d MMMM yyyy - HH:mm", { locale: tr })
+                        : "Planlanmış randevu yok"}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
+                  <div className="w-10 h-10 rounded-full bg-pink-500/10 flex items-center justify-center">
+                    <Pill className="w-5 h-5 text-pink-500" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Son Reçete Tarihi</p>
+                    <p className="font-semibold">
+                      {lastPrescriptionDate 
+                        ? format(new Date(lastPrescriptionDate), "d MMMM yyyy", { locale: tr })
+                        : "Henüz reçete yazılmamış"}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
+                  <div className="w-10 h-10 rounded-full bg-cyan-500/10 flex items-center justify-center">
+                    <Activity className="w-5 h-5 text-cyan-500" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Geliş Sıklığı</p>
+                    <p className="font-semibold">
+                      {visitFrequency || "Hesaplanamadı"}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
         </CardContent>
       </Card>
 
