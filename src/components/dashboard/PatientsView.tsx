@@ -346,6 +346,36 @@ export const PatientsView = ({ onPatientSelect }: PatientsViewProps) => {
         )}
       </div>
 
+      {/* Summary Row */}
+      <div className="flex items-center justify-between px-4 py-3 bg-muted/50 rounded-lg border">
+        <div className="flex items-center gap-2 text-sm">
+          <User className="w-4 h-4 text-muted-foreground" />
+          <span className="font-medium">{filteredPatients.length}</span>
+          <span className="text-muted-foreground">
+            {filteredPatients.length === patients.length 
+              ? "hasta" 
+              : `/ ${patients.length} hasta`}
+          </span>
+        </div>
+        {(searchTerm || genderFilter !== "all") && (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <span>Aktif filtreler:</span>
+            <div className="flex items-center gap-1">
+              {searchTerm && (
+                <span className="px-2 py-0.5 bg-primary/10 text-primary rounded-full text-xs">
+                  "{searchTerm}"
+                </span>
+              )}
+              {genderFilter !== "all" && (
+                <span className="px-2 py-0.5 bg-primary/10 text-primary rounded-full text-xs capitalize">
+                  {genderFilter}
+                </span>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
       {filteredPatients.length === 0 ? (
         <Card className="border-dashed">
           <CardContent className="flex flex-col items-center justify-center py-12">
