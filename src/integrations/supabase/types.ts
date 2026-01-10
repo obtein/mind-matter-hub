@@ -170,73 +170,35 @@ export type Database = {
       }
       session_medications: {
         Row: {
+          appointment_id: string
           created_at: string
           dosage: string | null
           id: string
           instructions: string | null
           medication_name: string
-          session_id: string
         }
         Insert: {
+          appointment_id: string
           created_at?: string
           dosage?: string | null
           id?: string
           instructions?: string | null
           medication_name: string
-          session_id: string
         }
         Update: {
+          appointment_id?: string
           created_at?: string
           dosage?: string | null
           id?: string
           instructions?: string | null
           medication_name?: string
-          session_id?: string
         }
         Relationships: [
           {
-            foreignKeyName: "session_medications_session_id_fkey"
-            columns: ["session_id"]
+            foreignKeyName: "session_medications_appointment_id_fkey"
+            columns: ["appointment_id"]
             isOneToOne: false
-            referencedRelation: "sessions"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      sessions: {
-        Row: {
-          created_at: string
-          doctor_id: string
-          id: string
-          notes: string | null
-          patient_id: string
-          session_date: string
-          updated_at: string
-        }
-        Insert: {
-          created_at?: string
-          doctor_id: string
-          id?: string
-          notes?: string | null
-          patient_id: string
-          session_date?: string
-          updated_at?: string
-        }
-        Update: {
-          created_at?: string
-          doctor_id?: string
-          id?: string
-          notes?: string | null
-          patient_id?: string
-          session_date?: string
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "sessions_patient_id_fkey"
-            columns: ["patient_id"]
-            isOneToOne: false
-            referencedRelation: "patients"
+            referencedRelation: "appointments"
             referencedColumns: ["id"]
           },
         ]

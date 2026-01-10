@@ -39,7 +39,7 @@ export const DashboardSidebar = ({ viewState, setViewState, user }: DashboardSid
 
   const isActive = (type: string) => {
     if (type === "patients") {
-      return viewState.type === "patients" || viewState.type === "patient-detail" || viewState.type === "session-detail";
+      return viewState.type === "patients" || viewState.type === "patient-detail" || viewState.type === "appointment-detail";
     }
     return viewState.type === type;
   };

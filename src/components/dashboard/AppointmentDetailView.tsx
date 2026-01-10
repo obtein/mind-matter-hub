@@ -8,14 +8,16 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { ArrowLeft, Plus, Pill, Save, Calendar, Clock, Trash2, Loader2, FileText } from "lucide-react";
+import { ArrowLeft, Plus, Pill, Save, Calendar, Clock, Trash2, Loader2, FileText, CheckCircle, XCircle } from "lucide-react";
 import { format } from "date-fns";
 import { tr } from "date-fns/locale";
 
-interface Session {
+interface Appointment {
   id: string;
-  session_date: string;
+  appointment_date: string;
+  duration_minutes: number;
   notes: string | null;
+  status: string;
   patient_id: string;
 }
 
@@ -31,28 +33,28 @@ interface Patient {
   full_name: string;
 }
 
-interface SessionDetailViewProps {
-  sessionId: string;
+interface AppointmentDetailViewProps {
+  appointmentId: string;
   patientId: string;
   onBack: () => void;
 }
 
-export const SessionDetailView = ({ sessionId, patientId, onBack }: SessionDetailViewProps) => {
-  const [session, setSession] = useState<Session | null>(null);
+export const AppointmentDetailView = ({ appointmentId, patientId, onBack }: AppointmentDetailViewProps) => {
+  const [appointment, setAppointment] = useState<Appointment | null>(null);
   const [patient, setPatient] = useState<Patient | null>(null);
   const [medications, setMedications] = useState<Medication[]>([]);
-  const [patients, setPatients] = useState<Patient[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [notes, setNotes] = useState("");
+  const [status, setStatus] = useState("scheduled");
   const [isMedicationDialogOpen, setIsMedicationDialogOpen] = useState(false);
-  const [isAppointmentDialogOpen, setIsAppointmentDialogOpen] = useState(false);
+  const [isNewAppointmentDialogOpen, setIsNewAppointmentDialogOpen] = useState(false);
   const [medicationForm, setMedicationForm] = useState({
     medication_name: "",
     dosage: "",
     instructions: "",
   });
-  const [appointmentForm, setAppointmentForm] = useState({
+  const [newAppointmentForm, setNewAppointmentForm] = useState({
     appointment_date: "",
     appointment_time: "09:00",
     duration_minutes: "60",
@@ -61,26 +63,25 @@ export const SessionDetailView = ({ sessionId, patientId, onBack }: SessionDetai
 
   useEffect(() => {
     fetchData();
-  }, [sessionId]);
+  }, [appointmentId]);
 
   const fetchData = async () => {
     try {
-      const [sessionRes, patientRes, medicationsRes, patientsRes] = await Promise.all([
-        supabase.from("sessions").select("*").eq("id", sessionId).maybeSingle(),
+      const [appointmentRes, patientRes, medicationsRes] = await Promise.all([
+        supabase.from("appointments").select("*").eq("id", appointmentId).maybeSingle(),
         supabase.from("patients").select("id, full_name").eq("id", patientId).maybeSingle(),
-        supabase.from("session_medications").select("*").eq("session_id", sessionId).order("created_at"),
-        supabase.from("patients").select("id, full_name").order("full_name"),
+        supabase.from("session_medications").select("*").eq("appointment_id", appointmentId).order("created_at"),
       ]);
 
-      if (sessionRes.error) throw sessionRes.error;
+      if (appointmentRes.error) throw appointmentRes.error;
       if (patientRes.error) throw patientRes.error;
       if (medicationsRes.error) throw medicationsRes.error;
 
-      setSession(sessionRes.data);
+      setAppointment(appointmentRes.data);
       setPatient(patientRes.data);
       setMedications(medicationsRes.data || []);
-      setPatients(patientsRes.data || []);
-      setNotes(sessionRes.data?.notes || "");
+      setNotes(appointmentRes.data?.notes || "");
+      setStatus(appointmentRes.data?.status || "scheduled");
     } catch (error: any) {
       toast.error("Veriler yüklenemedi");
     } finally {
@@ -88,18 +89,18 @@ export const SessionDetailView = ({ sessionId, patientId, onBack }: SessionDetai
     }
   };
 
-  const handleSaveNotes = async () => {
+  const handleSave = async () => {
     setSaving(true);
     try {
       const { error } = await supabase
-        .from("sessions")
-        .update({ notes })
-        .eq("id", sessionId);
+        .from("appointments")
+        .update({ notes, status })
+        .eq("id", appointmentId);
 
       if (error) throw error;
-      toast.success("Notlar kaydedildi");
+      toast.success("Kaydedildi");
     } catch (error: any) {
-      toast.error("Notlar kaydedilemedi");
+      toast.error("Kaydedilemedi");
     } finally {
       setSaving(false);
     }
@@ -110,7 +111,7 @@ export const SessionDetailView = ({ sessionId, patientId, onBack }: SessionDetai
 
     try {
       const { error } = await supabase.from("session_medications").insert({
-        session_id: sessionId,
+        appointment_id: appointmentId,
         medication_name: medicationForm.medication_name,
         dosage: medicationForm.dosage || null,
         instructions: medicationForm.instructions || null,
@@ -140,7 +141,7 @@ export const SessionDetailView = ({ sessionId, patientId, onBack }: SessionDetai
     }
   };
 
-  const handleCreateAppointment = async (e: React.FormEvent) => {
+  const handleCreateNewAppointment = async (e: React.FormEvent) => {
     e.preventDefault();
 
     try {
@@ -148,22 +149,22 @@ export const SessionDetailView = ({ sessionId, patientId, onBack }: SessionDetai
       if (!user) throw new Error("Kullanıcı bulunamadı");
 
       const appointmentDateTime = new Date(
-        `${appointmentForm.appointment_date}T${appointmentForm.appointment_time}`
+        `${newAppointmentForm.appointment_date}T${newAppointmentForm.appointment_time}`
       );
 
       const { error } = await supabase.from("appointments").insert({
         doctor_id: user.id,
         patient_id: patientId,
         appointment_date: appointmentDateTime.toISOString(),
-        duration_minutes: parseInt(appointmentForm.duration_minutes),
-        notes: appointmentForm.notes || null,
+        duration_minutes: parseInt(newAppointmentForm.duration_minutes),
+        notes: newAppointmentForm.notes || null,
       });
 
       if (error) throw error;
 
-      toast.success("Randevu oluşturuldu");
-      setIsAppointmentDialogOpen(false);
-      setAppointmentForm({
+      toast.success("Yeni randevu oluşturuldu");
+      setIsNewAppointmentDialogOpen(false);
+      setNewAppointmentForm({
         appointment_date: "",
         appointment_time: "09:00",
         duration_minutes: "60",
@@ -182,10 +183,10 @@ export const SessionDetailView = ({ sessionId, patientId, onBack }: SessionDetai
     );
   }
 
-  if (!session || !patient) {
+  if (!appointment || !patient) {
     return (
       <div className="text-center py-12">
-        <p className="text-muted-foreground">Seans bulunamadı</p>
+        <p className="text-muted-foreground">Randevu bulunamadı</p>
         <Button variant="outline" className="mt-4" onClick={onBack}>
           Geri Dön
         </Button>
@@ -202,30 +203,30 @@ export const SessionDetailView = ({ sessionId, patientId, onBack }: SessionDetai
         </Button>
         <div className="flex-1">
           <h1 className="text-3xl font-display font-bold text-foreground">
-            {format(new Date(session.session_date), "d MMMM yyyy", { locale: tr })}
+            {format(new Date(appointment.appointment_date), "d MMMM yyyy - HH:mm", { locale: tr })}
           </h1>
-          <p className="text-muted-foreground">{patient.full_name} - Seans Detayı</p>
+          <p className="text-muted-foreground">{patient.full_name} - Randevu Detayı</p>
         </div>
-        <Dialog open={isAppointmentDialogOpen} onOpenChange={setIsAppointmentDialogOpen}>
+        <Dialog open={isNewAppointmentDialogOpen} onOpenChange={setIsNewAppointmentDialogOpen}>
           <DialogTrigger asChild>
             <Button variant="outline">
               <Calendar className="w-4 h-4 mr-2" />
-              Randevu Oluştur
+              Yeni Randevu
             </Button>
           </DialogTrigger>
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
               <DialogTitle className="font-display">Yeni Randevu Oluştur</DialogTitle>
             </DialogHeader>
-            <form onSubmit={handleCreateAppointment} className="space-y-4">
+            <form onSubmit={handleCreateNewAppointment} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="apt_date">Tarih *</Label>
                   <Input
                     id="apt_date"
                     type="date"
-                    value={appointmentForm.appointment_date}
-                    onChange={(e) => setAppointmentForm({ ...appointmentForm, appointment_date: e.target.value })}
+                    value={newAppointmentForm.appointment_date}
+                    onChange={(e) => setNewAppointmentForm({ ...newAppointmentForm, appointment_date: e.target.value })}
                     required
                   />
                 </div>
@@ -234,8 +235,8 @@ export const SessionDetailView = ({ sessionId, patientId, onBack }: SessionDetai
                   <Input
                     id="apt_time"
                     type="time"
-                    value={appointmentForm.appointment_time}
-                    onChange={(e) => setAppointmentForm({ ...appointmentForm, appointment_time: e.target.value })}
+                    value={newAppointmentForm.appointment_time}
+                    onChange={(e) => setNewAppointmentForm({ ...newAppointmentForm, appointment_time: e.target.value })}
                     required
                   />
                 </div>
@@ -243,8 +244,8 @@ export const SessionDetailView = ({ sessionId, patientId, onBack }: SessionDetai
               <div className="space-y-2">
                 <Label htmlFor="duration">Süre</Label>
                 <Select
-                  value={appointmentForm.duration_minutes}
-                  onValueChange={(value) => setAppointmentForm({ ...appointmentForm, duration_minutes: value })}
+                  value={newAppointmentForm.duration_minutes}
+                  onValueChange={(value) => setNewAppointmentForm({ ...newAppointmentForm, duration_minutes: value })}
                 >
                   <SelectTrigger>
                     <SelectValue />
@@ -261,8 +262,8 @@ export const SessionDetailView = ({ sessionId, patientId, onBack }: SessionDetai
                 <Label htmlFor="apt_notes">Randevu Notu</Label>
                 <Textarea
                   id="apt_notes"
-                  value={appointmentForm.notes}
-                  onChange={(e) => setAppointmentForm({ ...appointmentForm, notes: e.target.value })}
+                  value={newAppointmentForm.notes}
+                  onChange={(e) => setNewAppointmentForm({ ...newAppointmentForm, notes: e.target.value })}
                   rows={2}
                 />
               </div>
@@ -274,6 +275,58 @@ export const SessionDetailView = ({ sessionId, patientId, onBack }: SessionDetai
         </Dialog>
       </div>
 
+      {/* Appointment Info & Status */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle className="flex items-center gap-2">
+              <Clock className="w-5 h-5 text-primary" />
+              Randevu Bilgileri
+            </CardTitle>
+            <div className="flex items-center gap-2">
+              <Select value={status} onValueChange={setStatus}>
+                <SelectTrigger className="w-40">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="scheduled">
+                    <span className="flex items-center gap-2">
+                      <Calendar className="w-4 h-4" />
+                      Planlandı
+                    </span>
+                  </SelectItem>
+                  <SelectItem value="completed">
+                    <span className="flex items-center gap-2">
+                      <CheckCircle className="w-4 h-4 text-green-600" />
+                      Tamamlandı
+                    </span>
+                  </SelectItem>
+                  <SelectItem value="cancelled">
+                    <span className="flex items-center gap-2">
+                      <XCircle className="w-4 h-4 text-red-600" />
+                      İptal
+                    </span>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center gap-4 text-sm text-muted-foreground">
+            <span className="flex items-center gap-1">
+              <Calendar className="w-4 h-4" />
+              {format(new Date(appointment.appointment_date), "d MMMM yyyy", { locale: tr })}
+            </span>
+            <span className="flex items-center gap-1">
+              <Clock className="w-4 h-4" />
+              {format(new Date(appointment.appointment_date), "HH:mm", { locale: tr })}
+            </span>
+            <span>{appointment.duration_minutes} dakika</span>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Notes Section */}
       <Card>
         <CardHeader>
@@ -282,7 +335,7 @@ export const SessionDetailView = ({ sessionId, patientId, onBack }: SessionDetai
               <FileText className="w-5 h-5 text-primary" />
               Seans Notları
             </CardTitle>
-            <Button onClick={handleSaveNotes} disabled={saving} size="sm">
+            <Button onClick={handleSave} disabled={saving} size="sm">
               <Save className="w-4 h-4 mr-2" />
               {saving ? "Kaydediliyor..." : "Kaydet"}
             </Button>

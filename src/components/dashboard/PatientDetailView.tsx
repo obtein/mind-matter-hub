@@ -6,8 +6,9 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { ArrowLeft, Plus, User, Phone, Mail, MapPin, IdCard, Calendar, FileText, Trash2, ChevronRight, Loader2 } from "lucide-react";
+import { ArrowLeft, Plus, User, Phone, Mail, MapPin, IdCard, Calendar, FileText, Trash2, ChevronRight, Loader2, Clock } from "lucide-react";
 import { format } from "date-fns";
 import { tr } from "date-fns/locale";
 
@@ -24,26 +25,30 @@ interface Patient {
   notes: string | null;
 }
 
-interface Session {
+interface Appointment {
   id: string;
-  session_date: string;
+  appointment_date: string;
+  duration_minutes: number;
   notes: string | null;
+  status: string;
   created_at: string;
 }
 
 interface PatientDetailViewProps {
   patientId: string;
   onBack: () => void;
-  onSessionSelect: (sessionId: string) => void;
+  onAppointmentSelect: (appointmentId: string) => void;
 }
 
-export const PatientDetailView = ({ patientId, onBack, onSessionSelect }: PatientDetailViewProps) => {
+export const PatientDetailView = ({ patientId, onBack, onAppointmentSelect }: PatientDetailViewProps) => {
   const [patient, setPatient] = useState<Patient | null>(null);
-  const [sessions, setSessions] = useState<Session[]>([]);
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [formData, setFormData] = useState({
-    session_date: new Date().toISOString().split("T")[0],
+    appointment_date: new Date().toISOString().split("T")[0],
+    appointment_time: "09:00",
+    duration_minutes: "60",
     notes: "",
   });
 
@@ -53,24 +58,24 @@ export const PatientDetailView = ({ patientId, onBack, onSessionSelect }: Patien
 
   const fetchData = async () => {
     try {
-      const [patientRes, sessionsRes] = await Promise.all([
+      const [patientRes, appointmentsRes] = await Promise.all([
         supabase
           .from("patients")
           .select("*")
           .eq("id", patientId)
           .maybeSingle(),
         supabase
-          .from("sessions")
+          .from("appointments")
           .select("*")
           .eq("patient_id", patientId)
-          .order("session_date", { ascending: false }),
+          .order("appointment_date", { ascending: false }),
       ]);
 
       if (patientRes.error) throw patientRes.error;
-      if (sessionsRes.error) throw sessionsRes.error;
+      if (appointmentsRes.error) throw appointmentsRes.error;
 
       setPatient(patientRes.data);
-      setSessions(sessionsRes.data || []);
+      setAppointments(appointmentsRes.data || []);
     } catch (error: any) {
       toast.error("Veriler yüklenemedi");
     } finally {
@@ -78,45 +83,52 @@ export const PatientDetailView = ({ patientId, onBack, onSessionSelect }: Patien
     }
   };
 
-  const handleCreateSession = async (e: React.FormEvent) => {
+  const handleCreateAppointment = async (e: React.FormEvent) => {
     e.preventDefault();
 
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Kullanıcı bulunamadı");
 
-      const { error } = await supabase.from("sessions").insert({
+      const appointmentDateTime = new Date(
+        `${formData.appointment_date}T${formData.appointment_time}`
+      );
+
+      const { error } = await supabase.from("appointments").insert({
         patient_id: patientId,
         doctor_id: user.id,
-        session_date: new Date(formData.session_date).toISOString(),
+        appointment_date: appointmentDateTime.toISOString(),
+        duration_minutes: parseInt(formData.duration_minutes),
         notes: formData.notes || null,
       });
 
       if (error) throw error;
 
-      toast.success("Seans oluşturuldu");
+      toast.success("Randevu oluşturuldu");
       setIsDialogOpen(false);
       setFormData({
-        session_date: new Date().toISOString().split("T")[0],
+        appointment_date: new Date().toISOString().split("T")[0],
+        appointment_time: "09:00",
+        duration_minutes: "60",
         notes: "",
       });
       fetchData();
     } catch (error: any) {
-      toast.error(error.message || "Seans oluşturulamadı");
+      toast.error(error.message || "Randevu oluşturulamadı");
     }
   };
 
-  const handleDeleteSession = async (e: React.MouseEvent, sessionId: string) => {
+  const handleDeleteAppointment = async (e: React.MouseEvent, appointmentId: string) => {
     e.stopPropagation();
-    if (!confirm("Bu seansı silmek istediğinizden emin misiniz?")) return;
+    if (!confirm("Bu randevuyu silmek istediğinizden emin misiniz?")) return;
 
     try {
-      const { error } = await supabase.from("sessions").delete().eq("id", sessionId);
+      const { error } = await supabase.from("appointments").delete().eq("id", appointmentId);
       if (error) throw error;
-      toast.success("Seans silindi");
+      toast.success("Randevu silindi");
       fetchData();
     } catch (error: any) {
-      toast.error("Seans silinemedi");
+      toast.error("Randevu silinemedi");
     }
   };
 
@@ -130,6 +142,28 @@ export const PatientDetailView = ({ patientId, onBack, onSessionSelect }: Patien
       age--;
     }
     return `${age} yaş`;
+  };
+
+  const getStatusLabel = (status: string) => {
+    switch (status) {
+      case "completed":
+        return "Tamamlandı";
+      case "cancelled":
+        return "İptal";
+      default:
+        return "Planlandı";
+    }
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case "completed":
+        return "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400";
+      case "cancelled":
+        return "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400";
+      default:
+        return "bg-primary/10 text-primary";
+    }
   };
 
   if (loading) {
@@ -245,93 +279,131 @@ export const PatientDetailView = ({ patientId, onBack, onSessionSelect }: Patien
         </CardContent>
       </Card>
 
-      {/* Sessions Section */}
+      {/* Appointments Section */}
       <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="text-xl font-display font-semibold">Seanslar</h2>
+          <h2 className="text-xl font-display font-semibold">Randevular</h2>
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             <DialogTrigger asChild>
               <Button className="shadow-primary">
                 <Plus className="w-4 h-4 mr-2" />
-                Yeni Seans
+                Yeni Randevu
               </Button>
             </DialogTrigger>
             <DialogContent className="sm:max-w-md">
               <DialogHeader>
-                <DialogTitle className="font-display">Yeni Seans Oluştur</DialogTitle>
+                <DialogTitle className="font-display">Yeni Randevu Oluştur</DialogTitle>
               </DialogHeader>
-              <form onSubmit={handleCreateSession} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="session_date">Seans Tarihi *</Label>
-                  <Input
-                    id="session_date"
-                    type="date"
-                    value={formData.session_date}
-                    onChange={(e) => setFormData({ ...formData, session_date: e.target.value })}
-                    required
-                  />
+              <form onSubmit={handleCreateAppointment} className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="appointment_date">Tarih *</Label>
+                    <Input
+                      id="appointment_date"
+                      type="date"
+                      value={formData.appointment_date}
+                      onChange={(e) => setFormData({ ...formData, appointment_date: e.target.value })}
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="appointment_time">Saat *</Label>
+                    <Input
+                      id="appointment_time"
+                      type="time"
+                      value={formData.appointment_time}
+                      onChange={(e) => setFormData({ ...formData, appointment_time: e.target.value })}
+                      required
+                    />
+                  </div>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="notes">İlk Notlar</Label>
+                  <Label htmlFor="duration">Süre</Label>
+                  <Select
+                    value={formData.duration_minutes}
+                    onValueChange={(value) => setFormData({ ...formData, duration_minutes: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="30">30 dakika</SelectItem>
+                      <SelectItem value="45">45 dakika</SelectItem>
+                      <SelectItem value="60">1 saat</SelectItem>
+                      <SelectItem value="90">1.5 saat</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="notes">Randevu Notu</Label>
                   <Textarea
                     id="notes"
                     value={formData.notes}
                     onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                    placeholder="Seans hakkında ilk notlarınızı yazın..."
-                    rows={4}
+                    placeholder="Randevu hakkında notlarınızı yazın..."
+                    rows={3}
                   />
                 </div>
                 <Button type="submit" className="w-full">
-                  Seans Oluştur
+                  Randevu Oluştur
                 </Button>
               </form>
             </DialogContent>
           </Dialog>
         </div>
 
-        {sessions.length === 0 ? (
+        {appointments.length === 0 ? (
           <Card className="border-dashed">
             <CardContent className="flex flex-col items-center justify-center py-12">
-              <FileText className="w-12 h-12 text-muted-foreground/50 mb-4" />
-              <p className="text-muted-foreground text-center">Henüz seans eklenmemiş</p>
+              <Calendar className="w-12 h-12 text-muted-foreground/50 mb-4" />
+              <p className="text-muted-foreground text-center">Henüz randevu eklenmemiş</p>
               <Button variant="outline" className="mt-4" onClick={() => setIsDialogOpen(true)}>
                 <Plus className="w-4 h-4 mr-2" />
-                İlk seansı oluşturun
+                İlk randevuyu oluşturun
               </Button>
             </CardContent>
           </Card>
         ) : (
           <div className="space-y-3">
-            {sessions.map((session, index) => (
+            {appointments.map((appointment, index) => (
               <Card
-                key={session.id}
+                key={appointment.id}
                 className="group hover:shadow-medium transition-all duration-300 cursor-pointer animate-slide-up"
                 style={{ animationDelay: `${index * 50}ms` }}
-                onClick={() => onSessionSelect(session.id)}
+                onClick={() => onAppointmentSelect(appointment.id)}
               >
                 <CardContent className="p-4">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-4">
                       <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center">
-                        <FileText className="w-6 h-6 text-primary" />
+                        <Calendar className="w-6 h-6 text-primary" />
                       </div>
                       <div>
                         <p className="font-semibold">
-                          {format(new Date(session.session_date), "d MMMM yyyy", { locale: tr })}
+                          {format(new Date(appointment.appointment_date), "d MMMM yyyy - HH:mm", { locale: tr })}
                         </p>
-                        {session.notes && (
-                          <p className="text-sm text-muted-foreground line-clamp-1 max-w-md">
-                            {session.notes}
-                          </p>
-                        )}
+                        <div className="flex items-center gap-3 text-sm text-muted-foreground mt-1">
+                          <span className="flex items-center gap-1">
+                            <Clock className="w-3 h-3" />
+                            {appointment.duration_minutes} dk
+                          </span>
+                          {appointment.notes && (
+                            <span className="line-clamp-1 max-w-xs">
+                              {appointment.notes}
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
+                      <span className={`text-xs px-2 py-1 rounded-full ${getStatusColor(appointment.status)}`}>
+                        {getStatusLabel(appointment.status)}
+                      </span>
                       <Button
                         variant="ghost"
                         size="icon"
                         className="opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:text-destructive"
-                        onClick={(e) => handleDeleteSession(e, session.id)}
+                        onClick={(e) => handleDeleteAppointment(e, appointment.id)}
                       >
                         <Trash2 className="w-4 h-4" />
                       </Button>
