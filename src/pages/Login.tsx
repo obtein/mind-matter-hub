@@ -23,12 +23,19 @@ const Login = () => {
         password: loginData.password,
       });
 
-      if (error) throw error;
+      if (error) {
+        // Generic error message to prevent user enumeration attacks
+        console.error("Login error:", error.message);
+        toast.error("Giriş bilgileri hatalı. Lütfen e-posta ve şifrenizi kontrol edin.");
+        return;
+      }
 
       toast.success("Giriş başarılı!");
       navigate("/dashboard");
     } catch (error: any) {
-      toast.error(error.message || "Giriş yapılamadı");
+      // Never expose internal error details
+      console.error("Login error:", error);
+      toast.error("Giriş yapılamadı. Lütfen tekrar deneyin.");
     } finally {
       setIsLoading(false);
     }

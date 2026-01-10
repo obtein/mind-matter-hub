@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { Pill, Search, User, Calendar, Loader2, FileText } from "lucide-react";
+import { handleError } from "@/lib/errorHandler";
 import { format } from "date-fns";
 import { tr } from "date-fns/locale";
 
@@ -73,8 +74,8 @@ export const MedicationsReportView = () => {
       }));
 
       setMedications(transformedData);
-    } catch (error: any) {
-      toast.error("İlaç verileri yüklenemedi");
+    } catch (error: unknown) {
+      toast.error(handleError(error, "İlaç verileri yüklenemedi"));
     } finally {
       setLoading(false);
     }
