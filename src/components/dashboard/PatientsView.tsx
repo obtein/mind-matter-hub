@@ -32,6 +32,7 @@ export const PatientsView = ({ onPatientSelect }: PatientsViewProps) => {
   const [patients, setPatients] = useState<Patient[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
+  const [genderFilter, setGenderFilter] = useState<string>("all");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingPatient, setEditingPatient] = useState<Patient | null>(null);
   const [formData, setFormData] = useState({
@@ -162,10 +163,16 @@ export const PatientsView = ({ onPatientSelect }: PatientsViewProps) => {
     setIsDialogOpen(true);
   };
 
-  const filteredPatients = patients.filter((p) =>
-    p.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    p.tc_identity?.includes(searchTerm)
-  );
+  const filteredPatients = patients.filter((p) => {
+    const matchesSearch = 
+      p.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      p.tc_identity?.includes(searchTerm) ||
+      p.phone?.includes(searchTerm);
+    
+    const matchesGender = genderFilter === "all" || p.gender === genderFilter;
+    
+    return matchesSearch && matchesGender;
+  });
 
   const calculateAge = (dateOfBirth: string | null): string => {
     if (!dateOfBirth) return "";
@@ -306,14 +313,37 @@ export const PatientsView = ({ onPatientSelect }: PatientsViewProps) => {
         </Dialog>
       </div>
 
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-        <Input
-          placeholder="Hasta adı veya TC kimlik ile ara..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          className="pl-10 max-w-sm"
-        />
+      <div className="flex flex-col sm:flex-row gap-4">
+        <div className="relative flex-1 max-w-sm">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Input
+            placeholder="Ad, TC kimlik veya telefon ile ara..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="pl-10"
+          />
+        </div>
+        <Select value={genderFilter} onValueChange={setGenderFilter}>
+          <SelectTrigger className="w-[150px]">
+            <SelectValue placeholder="Cinsiyet" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Tümü</SelectItem>
+            <SelectItem value="erkek">Erkek</SelectItem>
+            <SelectItem value="kadın">Kadın</SelectItem>
+            <SelectItem value="diğer">Diğer</SelectItem>
+          </SelectContent>
+        </Select>
+        {(searchTerm || genderFilter !== "all") && (
+          <Button 
+            variant="ghost" 
+            size="sm"
+            onClick={() => { setSearchTerm(""); setGenderFilter("all"); }}
+            className="text-muted-foreground"
+          >
+            Filtreleri Temizle
+          </Button>
+        )}
       </div>
 
       {filteredPatients.length === 0 ? (
