@@ -35,7 +35,13 @@ const GENDER_COLORS: Record<string, string> = {
   belirsiz: "#6b7280", // Gray
 };
 
-const AGE_COLORS = ["hsl(var(--chart-1))", "hsl(var(--chart-2))", "hsl(var(--chart-3))", "hsl(var(--chart-4))", "hsl(var(--chart-5))"];
+const AGE_COLORS: Record<string, string> = {
+  "0-17": "#22c55e",   // Green - children
+  "18-30": "#3b82f6",  // Blue - young adults
+  "31-45": "#f59e0b",  // Amber - adults
+  "46-60": "#ef4444",  // Red - middle age
+  "60+": "#8b5cf6",    // Purple - seniors
+};
 
 export const StatisticsView = () => {
   const [stats, setStats] = useState<Stats | null>(null);
@@ -317,8 +323,8 @@ export const StatisticsView = () => {
                     }} 
                   />
                   <Bar dataKey="value" radius={[0, 4, 4, 0]} name="Hasta Sayısı">
-                    {stats.ageDistribution.map((_, index) => (
-                      <Cell key={`cell-${index}`} fill={AGE_COLORS[index % AGE_COLORS.length]} />
+                    {stats.ageDistribution.map((entry) => (
+                      <Cell key={`cell-${entry.name}`} fill={AGE_COLORS[entry.name] || "#6b7280"} />
                     ))}
                   </Bar>
                 </BarChart>
