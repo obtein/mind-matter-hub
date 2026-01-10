@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { ArrowLeft, Plus, User, Phone, Mail, MapPin, IdCard, Calendar, FileText, Trash2, ChevronRight, Loader2, Clock, Pill, Search, X, Activity, CalendarDays, CalendarCheck, CalendarClock } from "lucide-react";
+import { ArrowLeft, Plus, User, Phone, Mail, MapPin, IdCard, Calendar, FileText, Trash2, ChevronRight, Loader2, Clock, Pill, Search, X, Activity, CalendarDays, CalendarCheck, CalendarClock, Timer } from "lucide-react";
 import { format } from "date-fns";
 import { tr } from "date-fns/locale";
 import { checkAppointmentConflict } from "@/lib/appointmentUtils";
@@ -437,8 +437,35 @@ export const PatientDetailView = ({ patientId, onBack, onAppointmentSelect }: Pa
               }
             }
 
+            // Treatment duration calculation
+            let treatmentDuration = "";
+            if (firstVisit) {
+              const firstDate = new Date(firstVisit.appointment_date);
+              const today = new Date();
+              const diffTime = today.getTime() - firstDate.getTime();
+              const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+              
+              if (diffDays < 1) {
+                treatmentDuration = "Bugün başladı";
+              } else if (diffDays < 7) {
+                treatmentDuration = `${diffDays} gün`;
+              } else if (diffDays < 30) {
+                const weeks = Math.floor(diffDays / 7);
+                const days = diffDays % 7;
+                treatmentDuration = days > 0 ? `${weeks} hafta ${days} gün` : `${weeks} hafta`;
+              } else if (diffDays < 365) {
+                const months = Math.floor(diffDays / 30);
+                const weeks = Math.floor((diffDays % 30) / 7);
+                treatmentDuration = weeks > 0 ? `${months} ay ${weeks} hafta` : `${months} ay`;
+              } else {
+                const years = Math.floor(diffDays / 365);
+                const months = Math.floor((diffDays % 365) / 30);
+                treatmentDuration = months > 0 ? `${years} yıl ${months} ay` : `${years} yıl`;
+              }
+            }
+
             return (
-              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                 <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
                   <div className="w-10 h-10 rounded-full bg-blue-500/10 flex items-center justify-center">
                     <CalendarCheck className="w-5 h-5 text-blue-500" />
@@ -513,6 +540,18 @@ export const PatientDetailView = ({ patientId, onBack, onAppointmentSelect }: Pa
                     <p className="text-sm text-muted-foreground">Geliş Sıklığı</p>
                     <p className="font-semibold">
                       {visitFrequency || "Hesaplanamadı"}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
+                  <div className="w-10 h-10 rounded-full bg-amber-500/10 flex items-center justify-center">
+                    <Timer className="w-5 h-5 text-amber-500" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Tedavi Süresi</p>
+                    <p className="font-semibold">
+                      {treatmentDuration || "Hesaplanamadı"}
                     </p>
                   </div>
                 </div>
