@@ -10,6 +10,7 @@ import { MonthlyCalendar } from "./MonthlyCalendar";
 
 interface Appointment {
   id: string;
+  patient_id: string;
   appointment_date: string;
   duration_minutes: number;
   notes: string | null;
@@ -17,9 +18,13 @@ interface Appointment {
   patients: { full_name: string } | null;
 }
 
+interface DailyScheduleViewProps {
+  onAppointmentSelect?: (appointmentId: string, patientId: string) => void;
+}
+
 const HOURS = Array.from({ length: 13 }, (_, i) => i + 8); // 08:00 - 20:00
 
-export const DailyScheduleView = () => {
+export const DailyScheduleView = ({ onAppointmentSelect }: DailyScheduleViewProps) => {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
@@ -39,7 +44,7 @@ export const DailyScheduleView = () => {
 
       const { data, error } = await supabase
         .from("appointments")
-        .select("*, patients(full_name)")
+        .select("id, patient_id, appointment_date, duration_minutes, notes, status, patients(full_name)")
         .gte("appointment_date", startOfDay.toISOString())
         .lte("appointment_date", endOfDay.toISOString())
         .order("appointment_date", { ascending: true });
@@ -149,13 +154,14 @@ export const DailyScheduleView = () => {
               <div className="flex-1">
                 {appointment ? (
                   <Card
-                    className={`border-l-4 ${
+                    className={`border-l-4 cursor-pointer ${
                       appointment.status === "completed"
                         ? "border-l-green-500 bg-green-50/50 dark:bg-green-950/20"
                         : appointment.status === "cancelled"
                         ? "border-l-red-500 bg-red-50/50 dark:bg-red-950/20"
                         : "border-l-primary bg-primary/5"
                     } transition-all hover:shadow-medium`}
+                    onClick={() => onAppointmentSelect?.(appointment.id, appointment.patient_id)}
                   >
                     <CardContent className="p-4">
                       <div className="flex items-start justify-between">

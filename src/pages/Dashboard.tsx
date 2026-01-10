@@ -71,7 +71,13 @@ const Dashboard = () => {
         />
         <SidebarInset className="flex-1">
           <main className="p-6 lg:p-8">
-            {viewState.type === "schedule" && <DailyScheduleView />}
+            {viewState.type === "schedule" && (
+              <DailyScheduleView 
+                onAppointmentSelect={(appointmentId, patientId) => 
+                  navigateTo({ type: "appointment-detail", appointmentId, patientId })
+                }
+              />
+            )}
             {viewState.type === "patients" && <PatientsView onPatientSelect={(id) => navigateTo({ type: "patient-detail", patientId: id })} />}
             {viewState.type === "patient-detail" && viewState.patientId && (
               <PatientDetailView 
