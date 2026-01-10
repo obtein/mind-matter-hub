@@ -6,13 +6,29 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Plus, Search, User, Phone, Mail, Trash2, Edit, Loader2 } from "lucide-react";
-import type { Tables } from "@/integrations/supabase/types";
+import { Plus, Search, User, Phone, Trash2, Edit, Loader2, ChevronRight, MapPin, IdCard } from "lucide-react";
 
-type Patient = Tables<"patients">;
+interface Patient {
+  id: string;
+  full_name: string;
+  phone: string | null;
+  email: string | null;
+  date_of_birth: string | null;
+  gender: string | null;
+  address: string | null;
+  emergency_phone: string | null;
+  tc_identity: string | null;
+  notes: string | null;
+  created_at: string;
+}
 
-export const PatientsView = () => {
+interface PatientsViewProps {
+  onPatientSelect: (patientId: string) => void;
+}
+
+export const PatientsView = ({ onPatientSelect }: PatientsViewProps) => {
   const [patients, setPatients] = useState<Patient[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
@@ -23,6 +39,10 @@ export const PatientsView = () => {
     phone: "",
     email: "",
     date_of_birth: "",
+    gender: "",
+    address: "",
+    emergency_phone: "",
+    tc_identity: "",
     notes: "",
   });
 
@@ -53,28 +73,30 @@ export const PatientsView = () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Kullanıcı bulunamadı");
 
+      const patientData = {
+        full_name: formData.full_name,
+        phone: formData.phone || null,
+        email: formData.email || null,
+        date_of_birth: formData.date_of_birth || null,
+        gender: formData.gender || null,
+        address: formData.address || null,
+        emergency_phone: formData.emergency_phone || null,
+        tc_identity: formData.tc_identity || null,
+        notes: formData.notes || null,
+      };
+
       if (editingPatient) {
         const { error } = await supabase
           .from("patients")
-          .update({
-            full_name: formData.full_name,
-            phone: formData.phone || null,
-            email: formData.email || null,
-            date_of_birth: formData.date_of_birth || null,
-            notes: formData.notes || null,
-          })
+          .update(patientData)
           .eq("id", editingPatient.id);
 
         if (error) throw error;
         toast.success("Hasta güncellendi");
       } else {
         const { error } = await supabase.from("patients").insert({
+          ...patientData,
           doctor_id: user.id,
-          full_name: formData.full_name,
-          phone: formData.phone || null,
-          email: formData.email || null,
-          date_of_birth: formData.date_of_birth || null,
-          notes: formData.notes || null,
         });
 
         if (error) throw error;
@@ -82,15 +104,15 @@ export const PatientsView = () => {
       }
 
       setIsDialogOpen(false);
-      setEditingPatient(null);
-      setFormData({ full_name: "", phone: "", email: "", date_of_birth: "", notes: "" });
+      resetForm();
       fetchPatients();
     } catch (error: any) {
       toast.error(error.message || "İşlem başarısız");
     }
   };
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = async (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
     if (!confirm("Bu hastayı silmek istediğinizden emin misiniz?")) return;
 
     try {
@@ -103,27 +125,59 @@ export const PatientsView = () => {
     }
   };
 
-  const openEditDialog = (patient: Patient) => {
+  const openEditDialog = (e: React.MouseEvent, patient: Patient) => {
+    e.stopPropagation();
     setEditingPatient(patient);
     setFormData({
       full_name: patient.full_name,
       phone: patient.phone || "",
       email: patient.email || "",
       date_of_birth: patient.date_of_birth || "",
+      gender: patient.gender || "",
+      address: patient.address || "",
+      emergency_phone: patient.emergency_phone || "",
+      tc_identity: patient.tc_identity || "",
       notes: patient.notes || "",
     });
     setIsDialogOpen(true);
   };
 
-  const openNewDialog = () => {
+  const resetForm = () => {
     setEditingPatient(null);
-    setFormData({ full_name: "", phone: "", email: "", date_of_birth: "", notes: "" });
+    setFormData({
+      full_name: "",
+      phone: "",
+      email: "",
+      date_of_birth: "",
+      gender: "",
+      address: "",
+      emergency_phone: "",
+      tc_identity: "",
+      notes: "",
+    });
+  };
+
+  const openNewDialog = () => {
+    resetForm();
     setIsDialogOpen(true);
   };
 
   const filteredPatients = patients.filter((p) =>
-    p.full_name.toLowerCase().includes(searchTerm.toLowerCase())
+    p.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    p.tc_identity?.includes(searchTerm)
   );
+
+  const calculateAge = (dateOfBirth: string | null): string => {
+    if (!dateOfBirth) return "";
+    const today = new Date();
+    const birth = new Date(dateOfBirth);
+    let age = today.getFullYear() - birth.getFullYear();
+    const m = today.getMonth() - birth.getMonth();
+    if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) {
+      age--;
+    }
+    return `${age} yaş`;
+  };
 
   if (loading) {
     return (
@@ -147,31 +201,47 @@ export const PatientsView = () => {
               Yeni Hasta
             </Button>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-md">
+          <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle className="font-display">
                 {editingPatient ? "Hasta Düzenle" : "Yeni Hasta Ekle"}
               </DialogTitle>
             </DialogHeader>
             <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="full_name">Ad Soyad *</Label>
-                <Input
-                  id="full_name"
-                  value={formData.full_name}
-                  onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
-                  required
-                />
-              </div>
               <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="phone">Telefon</Label>
+                <div className="space-y-2 col-span-2">
+                  <Label htmlFor="full_name">Ad Soyad *</Label>
                   <Input
-                    id="phone"
-                    type="tel"
-                    value={formData.phone}
-                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                    id="full_name"
+                    value={formData.full_name}
+                    onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
+                    required
                   />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="tc_identity">TC Kimlik No</Label>
+                  <Input
+                    id="tc_identity"
+                    value={formData.tc_identity}
+                    onChange={(e) => setFormData({ ...formData, tc_identity: e.target.value })}
+                    maxLength={11}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="gender">Cinsiyet</Label>
+                  <Select
+                    value={formData.gender}
+                    onValueChange={(value) => setFormData({ ...formData, gender: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Seçin" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="erkek">Erkek</SelectItem>
+                      <SelectItem value="kadın">Kadın</SelectItem>
+                      <SelectItem value="diğer">Diğer</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="date_of_birth">Doğum Tarihi</Label>
@@ -182,18 +252,45 @@ export const PatientsView = () => {
                     onChange={(e) => setFormData({ ...formData, date_of_birth: e.target.value })}
                   />
                 </div>
+                <div className="space-y-2">
+                  <Label htmlFor="phone">Telefon</Label>
+                  <Input
+                    id="phone"
+                    type="tel"
+                    value={formData.phone}
+                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="emergency_phone">Yakın Telefonu</Label>
+                  <Input
+                    id="emergency_phone"
+                    type="tel"
+                    value={formData.emergency_phone}
+                    onChange={(e) => setFormData({ ...formData, emergency_phone: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="email">E-posta</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    value={formData.email}
+                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  />
+                </div>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="email">E-posta</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                <Label htmlFor="address">Adres</Label>
+                <Textarea
+                  id="address"
+                  value={formData.address}
+                  onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                  rows={2}
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="notes">Notlar</Label>
+                <Label htmlFor="notes">Genel Notlar</Label>
                 <Textarea
                   id="notes"
                   value={formData.notes}
@@ -212,7 +309,7 @@ export const PatientsView = () => {
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
         <Input
-          placeholder="Hasta ara..."
+          placeholder="Hasta adı veya TC kimlik ile ara..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           className="pl-10 max-w-sm"
@@ -239,8 +336,9 @@ export const PatientsView = () => {
           {filteredPatients.map((patient, index) => (
             <Card 
               key={patient.id} 
-              className="group hover:shadow-medium transition-all duration-300 animate-slide-up"
+              className="group hover:shadow-medium transition-all duration-300 animate-slide-up cursor-pointer"
               style={{ animationDelay: `${index * 50}ms` }}
+              onClick={() => onPatientSelect(patient.id)}
             >
               <CardHeader className="pb-3">
                 <div className="flex items-start justify-between">
@@ -248,46 +346,60 @@ export const PatientsView = () => {
                     <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
                       <User className="w-5 h-5 text-primary" />
                     </div>
-                    <CardTitle className="text-lg font-semibold">{patient.full_name}</CardTitle>
+                    <div>
+                      <CardTitle className="text-lg font-semibold">{patient.full_name}</CardTitle>
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        {patient.gender && <span className="capitalize">{patient.gender}</span>}
+                        {patient.date_of_birth && (
+                          <>
+                            {patient.gender && <span>•</span>}
+                            <span>{calculateAge(patient.date_of_birth)}</span>
+                          </>
+                        )}
+                      </div>
+                    </div>
                   </div>
-                  <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8"
-                      onClick={() => openEditDialog(patient)}
-                    >
-                      <Edit className="w-4 h-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 text-destructive hover:text-destructive"
-                      onClick={() => handleDelete(patient.id)}
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
-                  </div>
+                  <ChevronRight className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />
                 </div>
               </CardHeader>
               <CardContent className="space-y-2 text-sm">
+                {patient.tc_identity && (
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <IdCard className="w-4 h-4" />
+                    <span>{patient.tc_identity}</span>
+                  </div>
+                )}
                 {patient.phone && (
                   <div className="flex items-center gap-2 text-muted-foreground">
                     <Phone className="w-4 h-4" />
                     <span>{patient.phone}</span>
                   </div>
                 )}
-                {patient.email && (
+                {patient.address && (
                   <div className="flex items-center gap-2 text-muted-foreground">
-                    <Mail className="w-4 h-4" />
-                    <span className="truncate">{patient.email}</span>
+                    <MapPin className="w-4 h-4" />
+                    <span className="truncate">{patient.address}</span>
                   </div>
                 )}
-                {patient.notes && (
-                  <p className="text-muted-foreground line-clamp-2 pt-2 border-t">
-                    {patient.notes}
-                  </p>
-                )}
+                <div className="flex gap-1 pt-2 border-t opacity-0 group-hover:opacity-100 transition-opacity">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="flex-1"
+                    onClick={(e) => openEditDialog(e, patient)}
+                  >
+                    <Edit className="w-4 h-4 mr-1" />
+                    Düzenle
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-destructive hover:text-destructive"
+                    onClick={(e) => handleDelete(e, patient.id)}
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           ))}

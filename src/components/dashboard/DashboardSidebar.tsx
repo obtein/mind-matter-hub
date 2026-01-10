@@ -1,8 +1,7 @@
-import { Brain, Users, Calendar, FileText, LogOut } from "lucide-react";
+import { Brain, Users, Calendar, LogOut } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { useNavigate } from "react-router-dom";
-import type { ViewType } from "@/pages/Dashboard";
+import type { ViewState } from "@/pages/Dashboard";
 import type { User } from "@supabase/supabase-js";
 import {
   Sidebar,
@@ -18,28 +17,31 @@ import {
 } from "@/components/ui/sidebar";
 
 interface DashboardSidebarProps {
-  activeView: ViewType;
-  setActiveView: (view: ViewType) => void;
+  viewState: ViewState;
+  setViewState: (state: ViewState) => void;
   user: User;
 }
 
 const menuItems = [
-  { id: "patients" as ViewType, label: "Hastalar", icon: Users },
-  { id: "calendar" as ViewType, label: "Takvim", icon: Calendar },
-  { id: "notes" as ViewType, label: "Notlar", icon: FileText },
+  { type: "schedule" as const, label: "Günlük Randevular", icon: Calendar },
+  { type: "patients" as const, label: "Hastalar", icon: Users },
 ];
 
-export const DashboardSidebar = ({ activeView, setActiveView, user }: DashboardSidebarProps) => {
-  const navigate = useNavigate();
-
+export const DashboardSidebar = ({ viewState, setViewState, user }: DashboardSidebarProps) => {
   const handleLogout = async () => {
     try {
       await supabase.auth.signOut();
       toast.success("Çıkış yapıldı");
-      navigate("/");
     } catch (error) {
       toast.error("Çıkış yapılamadı");
     }
+  };
+
+  const isActive = (type: string) => {
+    if (type === "patients") {
+      return viewState.type === "patients" || viewState.type === "patient-detail" || viewState.type === "session-detail";
+    }
+    return viewState.type === type;
   };
 
   return (
@@ -62,10 +64,10 @@ export const DashboardSidebar = ({ activeView, setActiveView, user }: DashboardS
           <SidebarGroupContent>
             <SidebarMenu>
               {menuItems.map((item) => (
-                <SidebarMenuItem key={item.id}>
+                <SidebarMenuItem key={item.type}>
                   <SidebarMenuButton
-                    onClick={() => setActiveView(item.id)}
-                    isActive={activeView === item.id}
+                    onClick={() => setViewState({ type: item.type })}
+                    isActive={isActive(item.type)}
                     className="w-full"
                   >
                     <item.icon className="w-5 h-5" />
