@@ -8,7 +8,8 @@ import { PatientDetailView } from "@/components/dashboard/PatientDetailView";
 import { AppointmentDetailView } from "@/components/dashboard/AppointmentDetailView";
 import { StatisticsView } from "@/components/dashboard/StatisticsView";
 import { MedicationsReportView } from "@/components/dashboard/MedicationsReportView";
-import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
+import { NotificationBell } from "@/components/dashboard/NotificationBell";
+import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui/sidebar";
 import type { User } from "@supabase/supabase-js";
 
 export type ViewType = "schedule" | "patients" | "patient-detail" | "appointment-detail" | "statistics" | "medications";
@@ -72,6 +73,12 @@ const Dashboard = () => {
           user={user}
         />
         <SidebarInset className="flex-1">
+          <header className="flex items-center justify-between px-6 py-3 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+            <div className="flex items-center gap-2">
+              <SidebarTrigger className="md:hidden" />
+            </div>
+            <NotificationBell />
+          </header>
           <main className="p-6 lg:p-8">
             {viewState.type === "schedule" && (
               <DailyScheduleView 
