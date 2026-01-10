@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { ArrowLeft, Plus, User, Phone, Mail, MapPin, IdCard, Calendar, FileText, Trash2, ChevronRight, Loader2, Clock } from "lucide-react";
+import { ArrowLeft, Plus, User, Phone, Mail, MapPin, IdCard, Calendar, FileText, Trash2, ChevronRight, Loader2, Clock, Pill } from "lucide-react";
 import { format } from "date-fns";
 import { tr } from "date-fns/locale";
 import { checkAppointmentConflict } from "@/lib/appointmentUtils";
@@ -35,6 +35,14 @@ interface Appointment {
   created_at: string;
 }
 
+interface MedicationHistory {
+  id: string;
+  medication_name: string;
+  dosage: string | null;
+  instructions: string | null;
+  appointment_date: string;
+}
+
 interface PatientDetailViewProps {
   patientId: string;
   onBack: () => void;
@@ -44,6 +52,7 @@ interface PatientDetailViewProps {
 export const PatientDetailView = ({ patientId, onBack, onAppointmentSelect }: PatientDetailViewProps) => {
   const [patient, setPatient] = useState<Patient | null>(null);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [medications, setMedications] = useState<MedicationHistory[]>([]);
   const [loading, setLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [conflictWarning, setConflictWarning] = useState<string | null>(null);
@@ -115,6 +124,33 @@ export const PatientDetailView = ({ patientId, onBack, onAppointmentSelect }: Pa
 
       setPatient(patientRes.data);
       setAppointments(appointmentsRes.data || []);
+
+      // Fetch medications for all appointments of this patient
+      if (appointmentsRes.data && appointmentsRes.data.length > 0) {
+        const appointmentIds = appointmentsRes.data.map((a) => a.id);
+        const { data: medsData, error: medsError } = await supabase
+          .from("session_medications")
+          .select(`
+            id,
+            medication_name,
+            dosage,
+            instructions,
+            appointments:appointment_id (appointment_date)
+          `)
+          .in("appointment_id", appointmentIds)
+          .order("created_at", { ascending: false });
+
+        if (!medsError && medsData) {
+          const transformedMeds: MedicationHistory[] = medsData.map((med: any) => ({
+            id: med.id,
+            medication_name: med.medication_name,
+            dosage: med.dosage,
+            instructions: med.instructions,
+            appointment_date: med.appointments?.appointment_date || "",
+          }));
+          setMedications(transformedMeds);
+        }
+      }
     } catch (error: any) {
       toast.error("Veriler yüklenemedi");
     } finally {
@@ -325,6 +361,59 @@ export const PatientDetailView = ({ patientId, onBack, onAppointmentSelect }: Pa
             <div className="md:col-span-2 lg:col-span-3 pt-4 border-t">
               <p className="text-sm text-muted-foreground mb-1">Genel Notlar</p>
               <p className="text-sm">{patient.notes}</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Medication History Section */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Pill className="w-5 h-5 text-primary" />
+            İlaç Geçmişi
+            {medications.length > 0 && (
+              <span className="text-sm font-normal text-muted-foreground">
+                ({medications.length} kayıt)
+              </span>
+            )}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {medications.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              <Pill className="w-10 h-10 mx-auto mb-3 opacity-30" />
+              <p>Henüz ilaç kaydı yok</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {medications.map((med) => (
+                <div
+                  key={med.id}
+                  className="flex items-start justify-between p-4 rounded-lg bg-muted/50 border"
+                >
+                  <div className="flex items-start gap-3">
+                    <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                      <Pill className="w-4 h-4 text-primary" />
+                    </div>
+                    <div>
+                      <p className="font-semibold">{med.medication_name}</p>
+                      {med.dosage && (
+                        <p className="text-sm text-muted-foreground">Doz: {med.dosage}</p>
+                      )}
+                      {med.instructions && (
+                        <p className="text-sm text-muted-foreground mt-1">{med.instructions}</p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="text-sm text-muted-foreground flex items-center gap-1">
+                    <Calendar className="w-3 h-3" />
+                    {med.appointment_date
+                      ? format(new Date(med.appointment_date), "d MMM yyyy", { locale: tr })
+                      : "-"}
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </CardContent>
