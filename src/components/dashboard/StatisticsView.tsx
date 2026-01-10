@@ -28,11 +28,11 @@ interface Stats {
   monthlyAppointments: { month: string; count: number }[];
 }
 
-const GENDER_COLORS = {
-  erkek: "hsl(var(--chart-1))",
-  kadın: "hsl(var(--chart-2))",
-  diğer: "hsl(var(--chart-3))",
-  belirsiz: "hsl(var(--chart-4))",
+const GENDER_COLORS: Record<string, string> = {
+  erkek: "#3b82f6",    // Blue
+  kadın: "#ec4899",    // Pink
+  diğer: "#8b5cf6",    // Purple
+  belirsiz: "#6b7280", // Gray
 };
 
 const AGE_COLORS = ["hsl(var(--chart-1))", "hsl(var(--chart-2))", "hsl(var(--chart-3))", "hsl(var(--chart-4))", "hsl(var(--chart-5))"];
@@ -260,14 +260,15 @@ export const StatisticsView = () => {
                       data={stats.genderDistribution}
                       cx="50%"
                       cy="50%"
-                      innerRadius={60}
-                      outerRadius={100}
-                      paddingAngle={5}
+                      innerRadius={50}
+                      outerRadius={90}
+                      paddingAngle={3}
                       dataKey="value"
-                      label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`}
+                      labelLine={true}
+                      label={({ name, percent }) => `${name} %${(percent * 100).toFixed(0)}`}
                     >
                       {stats.genderDistribution.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.color} />
+                        <Cell key={`cell-${index}`} fill={entry.color} stroke={entry.color} />
                       ))}
                     </Pie>
                     <Tooltip 
@@ -275,9 +276,14 @@ export const StatisticsView = () => {
                         backgroundColor: "hsl(var(--card))", 
                         border: "1px solid hsl(var(--border))",
                         borderRadius: "8px"
-                      }} 
+                      }}
+                      formatter={(value: number, name: string) => [`${value} hasta`, name]}
                     />
-                    <Legend />
+                    <Legend 
+                      verticalAlign="bottom"
+                      height={36}
+                      formatter={(value) => <span className="text-sm font-medium">{value}</span>}
+                    />
                   </PieChart>
                 </ResponsiveContainer>
               ) : (
