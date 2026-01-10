@@ -12,6 +12,7 @@ import { ArrowLeft, Plus, User, Phone, Mail, MapPin, IdCard, Calendar, FileText,
 import { format } from "date-fns";
 import { tr } from "date-fns/locale";
 import { checkAppointmentConflict } from "@/lib/appointmentUtils";
+import { handleError } from "@/lib/errorHandler";
 
 interface Patient {
   id: string;
@@ -238,7 +239,7 @@ export const PatientDetailView = ({ patientId, onBack, onAppointmentSelect }: Pa
       });
       fetchData();
     } catch (error: any) {
-      toast.error(error.message || "Randevu oluşturulamadı");
+      toast.error(handleError(error, "Randevu oluşturulamadı"));
     }
   };
 
@@ -252,7 +253,7 @@ export const PatientDetailView = ({ patientId, onBack, onAppointmentSelect }: Pa
       toast.success("Randevu silindi");
       fetchData();
     } catch (error: any) {
-      toast.error("Randevu silinemedi");
+      toast.error(handleError(error, "Randevu silinemedi"));
     }
   };
 

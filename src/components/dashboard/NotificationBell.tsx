@@ -11,6 +11,7 @@ import { Bell, Check, Trash2, Calendar, AlertCircle, Info, CheckCircle } from "l
 import { format, formatDistanceToNow } from "date-fns";
 import { tr } from "date-fns/locale";
 import { toast } from "sonner";
+import { handleError } from "@/lib/errorHandler";
 
 interface Notification {
   id: string;
