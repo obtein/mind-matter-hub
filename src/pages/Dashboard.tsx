@@ -6,10 +6,11 @@ import { PatientsView } from "@/components/dashboard/PatientsView";
 import { DailyScheduleView } from "@/components/dashboard/DailyScheduleView";
 import { PatientDetailView } from "@/components/dashboard/PatientDetailView";
 import { AppointmentDetailView } from "@/components/dashboard/AppointmentDetailView";
+import { StatisticsView } from "@/components/dashboard/StatisticsView";
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
 import type { User } from "@supabase/supabase-js";
 
-export type ViewType = "schedule" | "patients" | "patient-detail" | "appointment-detail";
+export type ViewType = "schedule" | "patients" | "patient-detail" | "appointment-detail" | "statistics";
 
 export interface ViewState {
   type: ViewType;
@@ -93,6 +94,7 @@ const Dashboard = () => {
                 onBack={() => navigateTo({ type: "patient-detail", patientId: viewState.patientId })}
               />
             )}
+            {viewState.type === "statistics" && <StatisticsView />}
           </main>
         </SidebarInset>
       </div>
