@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { ChevronLeft, ChevronRight, Clock, User, Loader2 } from "lucide-react";
 import { format, addDays, subDays, isSameDay, parseISO } from "date-fns";
 import { tr } from "date-fns/locale";
+import { MonthlyCalendar } from "./MonthlyCalendar";
 
 interface Appointment {
   id: string;
@@ -29,6 +30,7 @@ export const DailyScheduleView = () => {
 
   const fetchAppointments = async () => {
     try {
+      setLoading(true);
       const startOfDay = new Date(selectedDate);
       startOfDay.setHours(0, 0, 0, 0);
       
@@ -55,6 +57,10 @@ export const DailyScheduleView = () => {
   const goToNextDay = () => setSelectedDate(addDays(selectedDate, 1));
   const goToToday = () => setSelectedDate(new Date());
 
+  const handleDateSelect = (date: Date) => {
+    setSelectedDate(date);
+  };
+
   const getAppointmentForHour = (hour: number) => {
     return appointments.find((apt) => {
       const aptDate = parseISO(apt.appointment_date);
@@ -64,22 +70,17 @@ export const DailyScheduleView = () => {
 
   const isToday = isSameDay(selectedDate, new Date());
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-display font-bold text-foreground">Günlük Program</h1>
-          <p className="text-muted-foreground">Randevularınıza genel bakış</p>
+          <h1 className="text-3xl font-display font-bold text-foreground">Randevu Takvimi</h1>
+          <p className="text-muted-foreground">Aylık ve günlük randevularınız</p>
         </div>
       </div>
+
+      {/* Monthly Calendar */}
+      <MonthlyCalendar selectedDate={selectedDate} onDateSelect={handleDateSelect} />
 
       {/* Date Navigation */}
       <div className="flex items-center justify-between gap-4 bg-card rounded-xl p-4 shadow-soft border">
@@ -119,6 +120,11 @@ export const DailyScheduleView = () => {
       </div>
 
       {/* Time Slots */}
+      {loading ? (
+        <div className="flex items-center justify-center h-32">
+          <Loader2 className="w-6 h-6 animate-spin text-primary" />
+        </div>
+      ) : (
       <div className="space-y-2">
         {HOURS.map((hour) => {
           const appointment = getAppointmentForHour(hour);
@@ -206,6 +212,7 @@ export const DailyScheduleView = () => {
           );
         })}
       </div>
+      )}
     </div>
   );
 };
