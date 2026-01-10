@@ -8,10 +8,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { ArrowLeft, Plus, Pill, Save, Calendar, Clock, Trash2, Loader2, FileText, CheckCircle, XCircle } from "lucide-react";
+import { ArrowLeft, Plus, Pill, Save, Calendar, Clock, Trash2, Loader2, FileText, CheckCircle, XCircle, Download } from "lucide-react";
 import { format } from "date-fns";
 import { tr } from "date-fns/locale";
 import { checkAppointmentConflict } from "@/lib/appointmentUtils";
+import { generatePrescriptionPdf } from "@/lib/prescriptionPdf";
 
 interface Appointment {
   id: string;
@@ -226,6 +227,29 @@ export const AppointmentDetailView = ({ appointmentId, patientId, onBack }: Appo
     }
   };
 
+  const handleDownloadPrescription = async () => {
+    try {
+      // Get doctor's name
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("full_name")
+        .single();
+
+      const doctorName = profile?.full_name || "Doktor";
+
+      generatePrescriptionPdf({
+        patientName: patient?.full_name || "",
+        appointmentDate: format(new Date(appointment!.appointment_date), "d MMMM yyyy", { locale: tr }),
+        doctorName,
+        medications,
+      });
+
+      toast.success("Reçete PDF olarak indirildi");
+    } catch (error) {
+      toast.error("PDF oluşturulamadı");
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -431,14 +455,21 @@ export const AppointmentDetailView = ({ appointmentId, patientId, onBack }: Appo
               <Pill className="w-5 h-5 text-primary" />
               Reçete / İlaçlar
             </CardTitle>
-            <Dialog open={isMedicationDialogOpen} onOpenChange={setIsMedicationDialogOpen}>
-              <DialogTrigger asChild>
-                <Button size="sm">
-                  <Plus className="w-4 h-4 mr-2" />
-                  İlaç Ekle
+            <div className="flex items-center gap-2">
+              {medications.length > 0 && (
+                <Button variant="outline" size="sm" onClick={handleDownloadPrescription}>
+                  <Download className="w-4 h-4 mr-2" />
+                  PDF İndir
                 </Button>
-              </DialogTrigger>
-              <DialogContent className="sm:max-w-md">
+              )}
+              <Dialog open={isMedicationDialogOpen} onOpenChange={setIsMedicationDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button size="sm">
+                    <Plus className="w-4 h-4 mr-2" />
+                    İlaç Ekle
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="sm:max-w-md">
                 <DialogHeader>
                   <DialogTitle className="font-display">İlaç Ekle</DialogTitle>
                 </DialogHeader>
@@ -476,8 +507,9 @@ export const AppointmentDetailView = ({ appointmentId, patientId, onBack }: Appo
                     Ekle
                   </Button>
                 </form>
-              </DialogContent>
-            </Dialog>
+                </DialogContent>
+              </Dialog>
+            </div>
           </div>
         </CardHeader>
         <CardContent>
