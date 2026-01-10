@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { ArrowLeft, Plus, User, Phone, Mail, MapPin, IdCard, Calendar, FileText, Trash2, ChevronRight, Loader2, Clock, Pill } from "lucide-react";
+import { ArrowLeft, Plus, User, Phone, Mail, MapPin, IdCard, Calendar, FileText, Trash2, ChevronRight, Loader2, Clock, Pill, Search, X } from "lucide-react";
 import { format } from "date-fns";
 import { tr } from "date-fns/locale";
 import { checkAppointmentConflict } from "@/lib/appointmentUtils";
@@ -57,6 +57,8 @@ export const PatientDetailView = ({ patientId, onBack, onAppointmentSelect }: Pa
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [conflictWarning, setConflictWarning] = useState<string | null>(null);
   const [checkingConflict, setCheckingConflict] = useState(false);
+  const [medSearchTerm, setMedSearchTerm] = useState("");
+  const [medDateFilter, setMedDateFilter] = useState<string>("");
   const [formData, setFormData] = useState({
     appointment_date: new Date().toISOString().split("T")[0],
     appointment_time: "09:00",
@@ -103,6 +105,20 @@ export const PatientDetailView = ({ patientId, onBack, onAppointmentSelect }: Pa
     const debounce = setTimeout(checkConflict, 300);
     return () => clearTimeout(debounce);
   }, [formData.appointment_date, formData.appointment_time, formData.duration_minutes]);
+
+  // Filter medications based on search and date
+  const filteredMedications = medications.filter((med) => {
+    const matchesSearch = med.medication_name.toLowerCase().includes(medSearchTerm.toLowerCase());
+    
+    let matchesDate = true;
+    if (medDateFilter && med.appointment_date) {
+      const medDate = new Date(med.appointment_date);
+      const [filterYear, filterMonth] = medDateFilter.split("-").map(Number);
+      matchesDate = medDate.getFullYear() === filterYear && medDate.getMonth() + 1 === filterMonth;
+    }
+    
+    return matchesSearch && matchesDate;
+  });
 
   const fetchData = async () => {
     try {
@@ -369,15 +385,47 @@ export const PatientDetailView = ({ patientId, onBack, onAppointmentSelect }: Pa
       {/* Medication History Section */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Pill className="w-5 h-5 text-primary" />
-            İlaç Geçmişi
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <CardTitle className="flex items-center gap-2">
+              <Pill className="w-5 h-5 text-primary" />
+              İlaç Geçmişi
+              {medications.length > 0 && (
+                <span className="text-sm font-normal text-muted-foreground">
+                  ({filteredMedications.length}/{medications.length})
+                </span>
+              )}
+            </CardTitle>
             {medications.length > 0 && (
-              <span className="text-sm font-normal text-muted-foreground">
-                ({medications.length} kayıt)
-              </span>
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                  <Input
+                    placeholder="İlaç ara..."
+                    value={medSearchTerm}
+                    onChange={(e) => setMedSearchTerm(e.target.value)}
+                    className="pl-8 h-8 w-36 text-sm"
+                  />
+                </div>
+                <Input
+                  type="month"
+                  value={medDateFilter}
+                  onChange={(e) => setMedDateFilter(e.target.value)}
+                  className="h-8 w-36 text-sm"
+                  placeholder="Ay seç"
+                />
+                {(medSearchTerm || medDateFilter) && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => { setMedSearchTerm(""); setMedDateFilter(""); }}
+                    className="h-8 px-2"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </Button>
+                )}
+              </div>
             )}
-          </CardTitle>
+          </div>
         </CardHeader>
         <CardContent>
           {medications.length === 0 ? (
@@ -385,9 +433,14 @@ export const PatientDetailView = ({ patientId, onBack, onAppointmentSelect }: Pa
               <Pill className="w-10 h-10 mx-auto mb-3 opacity-30" />
               <p>Henüz ilaç kaydı yok</p>
             </div>
+          ) : filteredMedications.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              <Search className="w-10 h-10 mx-auto mb-3 opacity-30" />
+              <p>Filtrelerle eşleşen ilaç bulunamadı</p>
+            </div>
           ) : (
             <div className="space-y-3">
-              {medications.map((med) => (
+              {filteredMedications.map((med) => (
                 <div
                   key={med.id}
                   className="flex items-start justify-between p-4 rounded-lg bg-muted/50 border"
