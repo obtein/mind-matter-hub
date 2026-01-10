@@ -13,6 +13,7 @@ import { format } from "date-fns";
 import { tr } from "date-fns/locale";
 import { checkAppointmentConflict } from "@/lib/appointmentUtils";
 import { generatePrescriptionPdf } from "@/lib/prescriptionPdf";
+import { handleError } from "@/lib/errorHandler";
 
 interface Appointment {
   id: string;

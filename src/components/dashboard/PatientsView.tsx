@@ -8,9 +8,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Plus, Search, User, Phone, Trash2, Edit, Loader2, ChevronRight, MapPin, IdCard, Calendar } from "lucide-react";
+import { Plus, Search, User, Phone, Trash2, Edit, Loader2, ChevronRight, MapPin, IdCard, Calendar, AlertCircle } from "lucide-react";
 import { format } from "date-fns";
 import { tr } from "date-fns/locale";
+import { isValidTCIdentity, formatTCIdentity } from "@/lib/validation";
+import { handleError } from "@/lib/errorHandler";
 
 interface Patient {
   id: string;
@@ -38,6 +40,7 @@ export const PatientsView = ({ onPatientSelect }: PatientsViewProps) => {
   const [genderFilter, setGenderFilter] = useState<string>("all");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingPatient, setEditingPatient] = useState<Patient | null>(null);
+  const [tcError, setTcError] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     full_name: "",
     phone: "",
@@ -93,6 +96,12 @@ export const PatientsView = ({ onPatientSelect }: PatientsViewProps) => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    // Validate TC identity if provided
+    if (formData.tc_identity && !isValidTCIdentity(formData.tc_identity)) {
+      setTcError("Geçersiz TC kimlik numarası");
+      return;
+    }
+    
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Kullanıcı bulunamadı");
@@ -131,7 +140,7 @@ export const PatientsView = ({ onPatientSelect }: PatientsViewProps) => {
       resetForm();
       fetchPatients();
     } catch (error: any) {
-      toast.error(error.message || "İşlem başarısız");
+      toast.error(handleError(error, "Hasta kaydedilemedi"));
     }
   };
 
@@ -145,7 +154,7 @@ export const PatientsView = ({ onPatientSelect }: PatientsViewProps) => {
       toast.success("Hasta silindi");
       fetchPatients();
     } catch (error: any) {
-      toast.error("Hasta silinemedi");
+      toast.error(handleError(error, "Hasta silinemedi"));
     }
   };
 
@@ -168,6 +177,7 @@ export const PatientsView = ({ onPatientSelect }: PatientsViewProps) => {
 
   const resetForm = () => {
     setEditingPatient(null);
+    setTcError(null);
     setFormData({
       full_name: "",
       phone: "",
@@ -179,6 +189,21 @@ export const PatientsView = ({ onPatientSelect }: PatientsViewProps) => {
       tc_identity: "",
       notes: "",
     });
+  };
+
+  const handleTCChange = (value: string) => {
+    const formatted = formatTCIdentity(value);
+    setFormData({ ...formData, tc_identity: formatted });
+    
+    if (formatted.length === 11) {
+      if (!isValidTCIdentity(formatted)) {
+        setTcError("Geçersiz TC kimlik numarası");
+      } else {
+        setTcError(null);
+      }
+    } else {
+      setTcError(null);
+    }
   };
 
   const openNewDialog = () => {
@@ -253,9 +278,17 @@ export const PatientsView = ({ onPatientSelect }: PatientsViewProps) => {
                   <Input
                     id="tc_identity"
                     value={formData.tc_identity}
-                    onChange={(e) => setFormData({ ...formData, tc_identity: e.target.value })}
+                    onChange={(e) => handleTCChange(e.target.value)}
                     maxLength={11}
+                    className={tcError ? "border-destructive" : ""}
+                    placeholder="11 haneli TC kimlik numarası"
                   />
+                  {tcError && (
+                    <div className="flex items-center gap-1 text-sm text-destructive">
+                      <AlertCircle className="w-3 h-3" />
+                      <span>{tcError}</span>
+                    </div>
+                  )}
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="gender">Cinsiyet</Label>
