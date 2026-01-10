@@ -3,18 +3,25 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { DashboardSidebar } from "@/components/dashboard/DashboardSidebar";
 import { PatientsView } from "@/components/dashboard/PatientsView";
-import { CalendarView } from "@/components/dashboard/CalendarView";
-import { NotesView } from "@/components/dashboard/NotesView";
+import { DailyScheduleView } from "@/components/dashboard/DailyScheduleView";
+import { PatientDetailView } from "@/components/dashboard/PatientDetailView";
+import { SessionDetailView } from "@/components/dashboard/SessionDetailView";
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
 import type { User } from "@supabase/supabase-js";
 
-export type ViewType = "patients" | "calendar" | "notes";
+export type ViewType = "schedule" | "patients" | "patient-detail" | "session-detail";
+
+export interface ViewState {
+  type: ViewType;
+  patientId?: string;
+  sessionId?: string;
+}
 
 const Dashboard = () => {
   const navigate = useNavigate();
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeView, setActiveView] = useState<ViewType>("patients");
+  const [viewState, setViewState] = useState<ViewState>({ type: "schedule" });
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
@@ -40,6 +47,10 @@ const Dashboard = () => {
     return () => subscription.unsubscribe();
   }, [navigate]);
 
+  const navigateTo = (newState: ViewState) => {
+    setViewState(newState);
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
@@ -54,15 +65,28 @@ const Dashboard = () => {
     <SidebarProvider>
       <div className="min-h-screen flex w-full bg-background">
         <DashboardSidebar 
-          activeView={activeView} 
-          setActiveView={setActiveView}
+          viewState={viewState}
+          setViewState={setViewState}
           user={user}
         />
         <SidebarInset className="flex-1">
           <main className="p-6 lg:p-8">
-            {activeView === "patients" && <PatientsView />}
-            {activeView === "calendar" && <CalendarView />}
-            {activeView === "notes" && <NotesView />}
+            {viewState.type === "schedule" && <DailyScheduleView />}
+            {viewState.type === "patients" && <PatientsView onPatientSelect={(id) => navigateTo({ type: "patient-detail", patientId: id })} />}
+            {viewState.type === "patient-detail" && viewState.patientId && (
+              <PatientDetailView 
+                patientId={viewState.patientId}
+                onBack={() => navigateTo({ type: "patients" })}
+                onSessionSelect={(sessionId) => navigateTo({ type: "session-detail", patientId: viewState.patientId, sessionId })}
+              />
+            )}
+            {viewState.type === "session-detail" && viewState.sessionId && viewState.patientId && (
+              <SessionDetailView
+                sessionId={viewState.sessionId}
+                patientId={viewState.patientId}
+                onBack={() => navigateTo({ type: "patient-detail", patientId: viewState.patientId })}
+              />
+            )}
           </main>
         </SidebarInset>
       </div>

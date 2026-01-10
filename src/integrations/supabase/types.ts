@@ -98,36 +98,48 @@ export type Database = {
       }
       patients: {
         Row: {
+          address: string | null
           created_at: string
           date_of_birth: string | null
           doctor_id: string
           email: string | null
+          emergency_phone: string | null
           full_name: string
+          gender: string | null
           id: string
           notes: string | null
           phone: string | null
+          tc_identity: string | null
           updated_at: string
         }
         Insert: {
+          address?: string | null
           created_at?: string
           date_of_birth?: string | null
           doctor_id: string
           email?: string | null
+          emergency_phone?: string | null
           full_name: string
+          gender?: string | null
           id?: string
           notes?: string | null
           phone?: string | null
+          tc_identity?: string | null
           updated_at?: string
         }
         Update: {
+          address?: string | null
           created_at?: string
           date_of_birth?: string | null
           doctor_id?: string
           email?: string | null
+          emergency_phone?: string | null
           full_name?: string
+          gender?: string | null
           id?: string
           notes?: string | null
           phone?: string | null
+          tc_identity?: string | null
           updated_at?: string
         }
         Relationships: []
@@ -155,6 +167,79 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      session_medications: {
+        Row: {
+          created_at: string
+          dosage: string | null
+          id: string
+          instructions: string | null
+          medication_name: string
+          session_id: string
+        }
+        Insert: {
+          created_at?: string
+          dosage?: string | null
+          id?: string
+          instructions?: string | null
+          medication_name: string
+          session_id: string
+        }
+        Update: {
+          created_at?: string
+          dosage?: string | null
+          id?: string
+          instructions?: string | null
+          medication_name?: string
+          session_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "session_medications_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sessions: {
+        Row: {
+          created_at: string
+          doctor_id: string
+          id: string
+          notes: string | null
+          patient_id: string
+          session_date: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          doctor_id: string
+          id?: string
+          notes?: string | null
+          patient_id: string
+          session_date?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          doctor_id?: string
+          id?: string
+          notes?: string | null
+          patient_id?: string
+          session_date?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sessions_patient_id_fkey"
+            columns: ["patient_id"]
+            isOneToOne: false
+            referencedRelation: "patients"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       user_roles: {
         Row: {
