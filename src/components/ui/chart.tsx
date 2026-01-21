@@ -58,6 +58,57 @@ const ChartContainer = React.forwardRef<
 });
 ChartContainer.displayName = "Chart";
 
+/**
+ * Sanitizes CSS color values to prevent CSS injection attacks.
+ * Only allows safe color formats: hex, rgb(), rgba(), hsl(), hsla(), and named colors.
+ * @security This function prevents malicious CSS from being injected via chart config.
+ */
+function sanitizeCssColor(color: string | undefined): string | null {
+  if (!color) return null;
+  
+  const trimmedColor = color.trim();
+  
+  // Hex colors: #fff, #ffffff, #ffffffff
+  if (/^#[0-9A-Fa-f]{3,8}$/.test(trimmedColor)) return trimmedColor;
+  
+  // RGB/RGBA: rgb(255, 255, 255) or rgba(255, 255, 255, 0.5)
+  if (/^rgba?\(\s*\d{1,3}\s*,\s*\d{1,3}\s*,\s*\d{1,3}\s*(,\s*[\d.]+\s*)?\)$/.test(trimmedColor)) return trimmedColor;
+  
+  // HSL/HSLA: hsl(360, 100%, 50%) or hsla(360, 100%, 50%, 0.5)
+  if (/^hsla?\(\s*\d{1,3}\s*,\s*\d{1,3}%\s*,\s*\d{1,3}%\s*(,\s*[\d.]+\s*)?\)$/.test(trimmedColor)) return trimmedColor;
+  
+  // CSS color names (common subset)
+  const cssColorNames = [
+    'transparent', 'currentcolor', 'inherit',
+    'black', 'white', 'red', 'green', 'blue', 'yellow', 'orange', 'purple', 'pink', 
+    'gray', 'grey', 'brown', 'cyan', 'magenta', 'lime', 'navy', 'teal', 'olive',
+    'maroon', 'aqua', 'silver', 'fuchsia'
+  ];
+  if (cssColorNames.includes(trimmedColor.toLowerCase())) return trimmedColor;
+  
+  // CSS variable reference: var(--color-name)
+  if (/^var\(--[a-zA-Z0-9-]+\)$/.test(trimmedColor)) return trimmedColor;
+  
+  // Reject anything else to prevent CSS injection
+  console.warn(`[ChartStyle] Unsafe CSS color value rejected: ${trimmedColor}`);
+  return null;
+}
+
+/**
+ * Sanitizes CSS identifier keys to prevent injection via config keys.
+ * Only allows alphanumeric characters and hyphens.
+ */
+function sanitizeCssKey(key: string): string | null {
+  if (/^[a-zA-Z0-9-]+$/.test(key)) return key;
+  console.warn(`[ChartStyle] Unsafe CSS key rejected: ${key}`);
+  return null;
+}
+
+/**
+ * ChartStyle component generates CSS variables for chart theming.
+ * @security Uses sanitization functions to prevent CSS injection attacks.
+ * Config values are validated before being inserted into the stylesheet.
+ */
 const ChartStyle = ({ id, config }: { id: string; config: ChartConfig }) => {
   const colorConfig = Object.entries(config).filter(([_, config]) => config.theme || config.color);
 
@@ -65,18 +116,23 @@ const ChartStyle = ({ id, config }: { id: string; config: ChartConfig }) => {
     return null;
   }
 
+  // Sanitize the chart ID to prevent selector injection
+  const safeId = id.replace(/[^a-zA-Z0-9-]/g, '');
+
   return (
     <style
       dangerouslySetInnerHTML={{
         __html: Object.entries(THEMES)
           .map(
             ([theme, prefix]) => `
-${prefix} [data-chart=${id}] {
+${prefix} [data-chart=${safeId}] {
 ${colorConfig
   .map(([key, itemConfig]) => {
-    const color = itemConfig.theme?.[theme as keyof typeof itemConfig.theme] || itemConfig.color;
-    return color ? `  --color-${key}: ${color};` : null;
+    const safeKey = sanitizeCssKey(key);
+    const color = sanitizeCssColor(itemConfig.theme?.[theme as keyof typeof itemConfig.theme] || itemConfig.color);
+    return safeKey && color ? `  --color-${safeKey}: ${color};` : null;
   })
+  .filter(Boolean)
   .join("\n")}
 }
 `,
