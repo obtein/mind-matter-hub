@@ -6,7 +6,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
-import { Brain, Heart, Shield, Loader2 } from "lucide-react";
+import { Heart, Shield, Loader2 } from "lucide-react";
+import psiTrakLogo from "/favicon.png";
 
 const Login = () => {
   const navigate = useNavigate();
@@ -48,8 +49,8 @@ const Login = () => {
         <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxnIGZpbGw9IiNmZmZmZmYiIGZpbGwtb3BhY2l0eT0iMC4wNSI+PGNpcmNsZSBjeD0iMzAiIGN5PSIzMCIgcj0iMiIvPjwvZz48L2c+PC9zdmc+')] opacity-50" />
         <div className="relative z-10 flex flex-col justify-center items-center text-primary-foreground p-12 w-full">
           <div className="flex items-center gap-3 mb-8">
-            <Brain className="w-12 h-12" />
-            <h1 className="text-4xl font-display font-bold">PsiTrack</h1>
+            <img src={psiTrakLogo} alt="PsiTrak Logo" className="w-12 h-12" />
+            <h1 className="text-4xl font-display font-bold">PsiTrak</h1>
           </div>
           <p className="text-xl text-center max-w-md opacity-90 mb-12">
             Psikiyatrist Hasta Takip Sistemi
@@ -84,8 +85,8 @@ const Login = () => {
         <div className="w-full max-w-md">
           {/* Mobile logo */}
           <div className="lg:hidden flex items-center justify-center gap-2 mb-8">
-            <Brain className="w-8 h-8 text-primary" />
-            <h1 className="text-2xl font-display font-bold text-foreground">PsiTrack</h1>
+            <img src={psiTrakLogo} alt="PsiTrak Logo" className="w-8 h-8" />
+            <h1 className="text-2xl font-display font-bold text-foreground">PsiTrak</h1>
           </div>
 
           <Card className="border-0 shadow-medium animate-scale-in">
