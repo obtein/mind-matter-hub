@@ -1,8 +1,9 @@
-import { Brain, Users, Calendar, LogOut, BarChart3, Pill } from "lucide-react";
+import { Users, Calendar, LogOut, BarChart3, Pill } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import type { ViewState } from "@/pages/Dashboard";
 import type { User } from "@supabase/supabase-js";
+import psiTrakLogo from "/favicon.png";
 import {
   Sidebar,
   SidebarContent,
@@ -50,11 +51,9 @@ export const DashboardSidebar = ({ viewState, setViewState, user }: DashboardSid
     <Sidebar className="border-r border-sidebar-border">
       <SidebarHeader className="p-4">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-sidebar-primary flex items-center justify-center">
-            <Brain className="w-6 h-6 text-sidebar-primary-foreground" />
-          </div>
+          <img src={psiTrakLogo} alt="PsiTrak Logo" className="w-10 h-10" />
           <div>
-            <h1 className="font-display font-bold text-lg text-sidebar-foreground">PsiTrack</h1>
+            <h1 className="font-display font-bold text-lg text-sidebar-foreground">PsiTrak</h1>
             <p className="text-xs text-sidebar-foreground/60">Hasta Takip Sistemi</p>
           </div>
         </div>
