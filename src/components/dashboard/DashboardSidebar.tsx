@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
-import { Users, Calendar, LogOut, BarChart3, Pill, Download, Upload, Loader2, Monitor } from "lucide-react";
-import { useAuth } from "@/services/ServiceContext";
+import { Users, Calendar, LogOut, BarChart3, Pill, Download, Upload, Loader2, Monitor, Database } from "lucide-react";
+import { useAuth, useDb } from "@/services/ServiceContext";
 import { toast } from "sonner";
 import type { ViewState } from "@/pages/Dashboard";
 import type { AppUser } from "@/services/auth";
