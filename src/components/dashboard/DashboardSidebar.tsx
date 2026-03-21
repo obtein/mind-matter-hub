@@ -48,7 +48,9 @@ const menuItems = [
 
 export const DashboardSidebar = ({ viewState, setViewState, user }: DashboardSidebarProps) => {
   const auth = useAuth();
+  const db = useDb();
   const [backupLoading, setBackupLoading] = useState(false);
+  const [webBackupLoading, setWebBackupLoading] = useState(false);
   const [exportPasswordOpen, setExportPasswordOpen] = useState(false);
   const [importPasswordOpen, setImportPasswordOpen] = useState(false);
   const [importConfirmOpen, setImportConfirmOpen] = useState(false);
