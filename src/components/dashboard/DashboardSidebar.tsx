@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Users, Calendar, LogOut, BarChart3, Pill, Download, Upload, Loader2 } from "lucide-react";
+import { Users, Calendar, LogOut, BarChart3, Pill, Download, Upload, Loader2, Monitor } from "lucide-react";
 import { useAuth } from "@/services/ServiceContext";
 import { toast } from "sonner";
 import type { ViewState } from "@/pages/Dashboard";
@@ -181,6 +181,14 @@ export const DashboardSidebar = ({ viewState, setViewState, user }: DashboardSid
                 <span className="text-xs">Geri Yükle</span>
               </SidebarMenuButton>
             </div>
+          )}
+          {!IS_TAURI && (
+            <SidebarMenuButton asChild className="w-full mb-3">
+              <a href="/downloads/PsiTrak_0.1.0_x64_en-US.msi" download>
+                <Monitor className="w-5 h-5" />
+                <span>Masaüstü Uygulamayı İndir</span>
+              </a>
+            </SidebarMenuButton>
           )}
           <SidebarMenuButton onClick={handleLogout} className="w-full text-destructive hover:text-destructive">
             <LogOut className="w-5 h-5" />
