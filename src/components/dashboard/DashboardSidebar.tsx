@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
-import { Users, Calendar, LogOut, BarChart3, Pill, Download, Upload, Loader2, Monitor } from "lucide-react";
-import { useAuth } from "@/services/ServiceContext";
+import { Users, Calendar, LogOut, BarChart3, Pill, Download, Upload, Loader2, Monitor, Database } from "lucide-react";
+import { useAuth, useDb } from "@/services/ServiceContext";
 import { toast } from "sonner";
 import type { ViewState } from "@/pages/Dashboard";
 import type { AppUser } from "@/services/auth";
@@ -48,7 +48,9 @@ const menuItems = [
 
 export const DashboardSidebar = ({ viewState, setViewState, user }: DashboardSidebarProps) => {
   const auth = useAuth();
+  const db = useDb();
   const [backupLoading, setBackupLoading] = useState(false);
+  const [webBackupLoading, setWebBackupLoading] = useState(false);
   const [exportPasswordOpen, setExportPasswordOpen] = useState(false);
   const [importPasswordOpen, setImportPasswordOpen] = useState(false);
   const [importConfirmOpen, setImportConfirmOpen] = useState(false);
@@ -103,6 +105,37 @@ export const DashboardSidebar = ({ viewState, setViewState, user }: DashboardSid
       toast.error(error.message || "Geri yükleme başarısız");
     } finally {
       setBackupLoading(false);
+    }
+  };
+
+  const handleWebBackup = async () => {
+    setWebBackupLoading(true);
+    try {
+      const [patients, appointments, medications, notifications] = await Promise.all([
+        db.getPatients(),
+        db.getAppointmentsForStats(),
+        db.getAllMedicationsWithDetails(),
+        db.getNotifications(1000),
+      ]);
+
+      const backupData = {
+        version: "1.0",
+        exportDate: new Date().toISOString(),
+        tables: { patients, appointments, medications, notifications },
+      };
+
+      const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `psitrak_yedek_${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success("Yedek dosyası indirildi");
+    } catch (error: any) {
+      toast.error("Yedek oluşturulamadı: " + (error.message || "Bilinmeyen hata"));
+    } finally {
+      setWebBackupLoading(false);
     }
   };
 
@@ -183,12 +216,22 @@ export const DashboardSidebar = ({ viewState, setViewState, user }: DashboardSid
             </div>
           )}
           {!IS_TAURI && (
-            <SidebarMenuButton asChild className="w-full mb-3">
-              <a href="/downloads/PsiTrak_0.1.0_x64_en-US.msi" download>
-                <Monitor className="w-5 h-5" />
-                <span>Masaüstü Uygulamayı İndir</span>
-              </a>
-            </SidebarMenuButton>
+            <div className="flex flex-col gap-2 mb-3">
+              <SidebarMenuButton
+                onClick={handleWebBackup}
+                disabled={webBackupLoading}
+                className="w-full"
+              >
+                {webBackupLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Database className="w-5 h-5" />}
+                <span>Verileri Yedekle (JSON)</span>
+              </SidebarMenuButton>
+              <SidebarMenuButton asChild className="w-full">
+                <a href="/downloads/PsiTrak_0.1.0_x64_en-US.msi" download>
+                  <Monitor className="w-5 h-5" />
+                  <span>Masaüstü Uygulamayı İndir</span>
+                </a>
+              </SidebarMenuButton>
+            </div>
           )}
           <SidebarMenuButton onClick={handleLogout} className="w-full text-destructive hover:text-destructive">
             <LogOut className="w-5 h-5" />
