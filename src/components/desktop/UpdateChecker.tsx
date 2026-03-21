@@ -12,23 +12,16 @@ export const UpdateChecker = () => {
         const update = await check();
 
         if (update) {
-          toast.info(`Yeni sürüm mevcut: v${update.version}`, {
-            duration: 15000,
-            action: {
-              label: "Güncelle",
-              onClick: async () => {
-                try {
-                  toast.loading("Güncelleme indiriliyor...");
-                  await update.downloadAndInstall();
-                  const { relaunch } = await import("@tauri-apps/plugin-process");
-                  toast.success("Güncelleme tamamlandı. Uygulama yeniden başlatılıyor...");
-                  await relaunch();
-                } catch (err: any) {
-                  toast.error("Güncelleme başarısız: " + (err.message || "Bilinmeyen hata"));
-                }
-              },
-            },
-          });
+          // Sessiz güncelleme — otomatik indir ve kur
+          toast.info(`Güncelleme indiriliyor: v${update.version}...`, { duration: Infinity, id: "update" });
+          try {
+            await update.downloadAndInstall();
+            toast.success("Güncelleme tamamlandı. Uygulama yeniden başlatılıyor...", { id: "update" });
+            const { relaunch } = await import("@tauri-apps/plugin-process");
+            await relaunch();
+          } catch (err: any) {
+            toast.error("Güncelleme başarısız: " + (err.message || "Bilinmeyen hata"), { id: "update" });
+          }
         }
       } catch {
         // Silently fail — updater endpoint might not be configured yet

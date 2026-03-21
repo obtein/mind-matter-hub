@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/services/ServiceContext";
 import { Button } from "@/components/ui/button";
@@ -13,7 +13,27 @@ const Login = () => {
   const navigate = useNavigate();
   const auth = useAuth();
   const [isLoading, setIsLoading] = useState(false);
+  const [checkingSession, setCheckingSession] = useState(true);
   const [loginData, setLoginData] = useState({ email: "", password: "" });
+
+  // Auto login: mevcut oturum varsa direkt dashboard'a yönlendir
+  useEffect(() => {
+    auth.getSession().then(({ user }) => {
+      if (user) {
+        navigate("/dashboard", { replace: true });
+      } else {
+        setCheckingSession(false);
+      }
+    }).catch(() => setCheckingSession(false));
+  }, [auth, navigate]);
+
+  if (checkingSession) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();

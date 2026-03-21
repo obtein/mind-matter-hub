@@ -74,6 +74,13 @@ export const DashboardSidebar = ({ viewState, setViewState, user }: DashboardSid
 
   const handleLogout = async () => {
     try {
+      // Çıkış öncesi Supabase'e yedekle
+      const { hasSyncCredentials, syncToSupabase } = await import("@/services/supabase-sync");
+      if (await hasSyncCredentials()) {
+        toast.info("Veriler yedekleniyor...", { id: "logout-sync" });
+        await syncToSupabase();
+        toast.dismiss("logout-sync");
+      }
       await auth.signOut();
       toast.success("Çıkış yapıldı");
     } catch {
