@@ -182,6 +182,14 @@ export const DashboardSidebar = ({ viewState, setViewState, user }: DashboardSid
               </SidebarMenuButton>
             </div>
           )}
+          {!IS_TAURI && (
+            <SidebarMenuButton asChild className="w-full mb-3">
+              <a href="/downloads/PsiTrak_0.1.0_x64_en-US.msi" download>
+                <Monitor className="w-5 h-5" />
+                <span>Masaüstü Uygulamayı İndir</span>
+              </a>
+            </SidebarMenuButton>
+          )}
           <SidebarMenuButton onClick={handleLogout} className="w-full text-destructive hover:text-destructive">
             <LogOut className="w-5 h-5" />
             <span>Çıkış Yap</span>
