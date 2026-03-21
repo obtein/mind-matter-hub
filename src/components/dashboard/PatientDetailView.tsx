@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { ArrowLeft, Plus, User, Phone, Mail, MapPin, IdCard, Calendar, FileText, Trash2, ChevronRight, Loader2, Clock, Pill, Search, X, Activity, CalendarDays, CalendarCheck, CalendarClock, Timer, Bell } from "lucide-react";
+import { ArrowLeft, Plus, User, Phone, MapPin, Calendar, FileText, Trash2, ChevronRight, Loader2, Clock, Stethoscope, Search, X, Activity, CalendarDays, CalendarCheck, CalendarClock, Timer, Bell, Briefcase, BadgeAlert } from "lucide-react";
 import { format } from "date-fns";
 import { tr } from "date-fns/locale";
 import { checkAppointmentConflict } from "@/lib/appointmentUtils";
@@ -22,12 +22,10 @@ interface Patient {
   id: string;
   full_name: string;
   phone: string | null;
-  email: string | null;
   date_of_birth: string | null;
   gender: string | null;
   address: string | null;
-  emergency_phone: string | null;
-  tc_identity: string | null;
+  meslek: string | null;
   notes: string | null;
 }
 
@@ -40,7 +38,7 @@ interface Appointment {
   created_at: string;
 }
 
-interface MedicationHistory {
+interface DiagnosisHistory {
   id: string;
   medication_name: string;
   dosage: string | null;
@@ -59,13 +57,13 @@ export const PatientDetailView = ({ patientId, onBack, onAppointmentSelect }: Pa
   const db = useDb();
   const [patient, setPatient] = useState<Patient | null>(null);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
-  const [medications, setMedications] = useState<MedicationHistory[]>([]);
+  const [medications, setMedications] = useState<DiagnosisHistory[]>([]);
   const [loading, setLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [conflictWarning, setConflictWarning] = useState<string | null>(null);
   const [checkingConflict, setCheckingConflict] = useState(false);
-  const [medSearchTerm, setMedSearchTerm] = useState("");
-  const [medDateFilter, setMedDateFilter] = useState<string>("");
+  const [diagSearchTerm, setDiagSearchTerm] = useState("");
+  const [diagDateFilter, setDiagDateFilter] = useState<string>("");
   const [deleteAppointmentId, setDeleteAppointmentId] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     appointment_date: new Date().toISOString().split("T")[0],
@@ -117,19 +115,26 @@ export const PatientDetailView = ({ patientId, onBack, onAppointmentSelect }: Pa
     return () => clearTimeout(debounce);
   }, [formData.appointment_date, formData.appointment_time, formData.duration_minutes]);
 
-  // Filter medications based on search and date
-  const filteredMedications = medications.filter((med) => {
-    const matchesSearch = med.medication_name.toLowerCase().includes(medSearchTerm.toLowerCase());
-    
+  // Filter diagnoses based on search and date
+  const filteredDiagnoses = medications.filter((med) => {
+    const matchesSearch = med.medication_name.toLowerCase().includes(diagSearchTerm.toLowerCase());
+
     let matchesDate = true;
-    if (medDateFilter && med.appointment_date) {
+    if (diagDateFilter && med.appointment_date) {
       const medDate = new Date(med.appointment_date);
-      const [filterYear, filterMonth] = medDateFilter.split("-").map(Number);
+      const [filterYear, filterMonth] = diagDateFilter.split("-").map(Number);
       matchesDate = medDate.getFullYear() === filterYear && medDate.getMonth() + 1 === filterMonth;
     }
-    
+
     return matchesSearch && matchesDate;
   });
+
+  // Detect diagnosis changes between consecutive entries (sorted chronologically)
+  const getDiagnosisChanged = (index: number): boolean => {
+    // filteredDiagnoses are ordered DESC by date; compare with next item (earlier date)
+    if (index >= filteredDiagnoses.length - 1) return false;
+    return filteredDiagnoses[index].medication_name !== filteredDiagnoses[index + 1].medication_name;
+  };
 
   const fetchData = async () => {
     try {
@@ -305,15 +310,6 @@ export const PatientDetailView = ({ patientId, onBack, onAppointmentSelect }: Pa
           </CardTitle>
         </CardHeader>
         <CardContent className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {patient.tc_identity && (
-            <div className="flex items-center gap-3">
-              <IdCard className="w-5 h-5 text-muted-foreground" />
-              <div>
-                <p className="text-sm text-muted-foreground">TC Kimlik</p>
-                <p className="font-medium">{patient.tc_identity}</p>
-              </div>
-            </div>
-          )}
           {patient.gender && (
             <div className="flex items-center gap-3">
               <User className="w-5 h-5 text-muted-foreground" />
@@ -341,21 +337,12 @@ export const PatientDetailView = ({ patientId, onBack, onAppointmentSelect }: Pa
               </div>
             </div>
           )}
-          {patient.emergency_phone && (
+          {patient.meslek && (
             <div className="flex items-center gap-3">
-              <Phone className="w-5 h-5 text-muted-foreground" />
+              <Briefcase className="w-5 h-5 text-muted-foreground" />
               <div>
-                <p className="text-sm text-muted-foreground">Yakın Telefonu</p>
-                <p className="font-medium">{patient.emergency_phone}</p>
-              </div>
-            </div>
-          )}
-          {patient.email && (
-            <div className="flex items-center gap-3">
-              <Mail className="w-5 h-5 text-muted-foreground" />
-              <div>
-                <p className="text-sm text-muted-foreground">E-posta</p>
-                <p className="font-medium">{patient.email}</p>
+                <p className="text-sm text-muted-foreground">Meslek</p>
+                <p className="font-medium">{patient.meslek}</p>
               </div>
             </div>
           )}
@@ -515,14 +502,14 @@ export const PatientDetailView = ({ patientId, onBack, onAppointmentSelect }: Pa
 
                 <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
                   <div className="w-10 h-10 rounded-full bg-pink-500/10 flex items-center justify-center">
-                    <Pill className="w-5 h-5 text-pink-500" />
+                    <Stethoscope className="w-5 h-5 text-pink-500" />
                   </div>
                   <div>
-                    <p className="text-sm text-muted-foreground">Son Reçete Tarihi</p>
+                    <p className="text-sm text-muted-foreground">Son Tanı Tarihi</p>
                     <p className="font-semibold">
-                      {lastPrescriptionDate 
+                      {lastPrescriptionDate
                         ? format(new Date(lastPrescriptionDate), "d MMMM yyyy", { locale: tr })
-                        : "Henüz reçete yazılmamış"}
+                        : "Henüz tanı girilmemiş"}
                     </p>
                   </div>
                 </div>
@@ -556,16 +543,16 @@ export const PatientDetailView = ({ patientId, onBack, onAppointmentSelect }: Pa
         </CardContent>
       </Card>
 
-      {/* Medication History Section */}
+      {/* Diagnosis History Section */}
       <Card>
         <CardHeader>
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <CardTitle className="flex items-center gap-2">
-              <Pill className="w-5 h-5 text-primary" />
-              İlaç Geçmişi
+              <Stethoscope className="w-5 h-5 text-primary" />
+              Tanı Geçmişi
               {medications.length > 0 && (
                 <span className="text-sm font-normal text-muted-foreground">
-                  ({filteredMedications.length}/{medications.length})
+                  ({filteredDiagnoses.length}/{medications.length})
                 </span>
               )}
             </CardTitle>
@@ -574,24 +561,24 @@ export const PatientDetailView = ({ patientId, onBack, onAppointmentSelect }: Pa
                 <div className="relative">
                   <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
                   <Input
-                    placeholder="İlaç ara..."
-                    value={medSearchTerm}
-                    onChange={(e) => setMedSearchTerm(e.target.value)}
+                    placeholder="Tanı ara..."
+                    value={diagSearchTerm}
+                    onChange={(e) => setDiagSearchTerm(e.target.value)}
                     className="pl-8 h-8 w-36 text-sm"
                   />
                 </div>
                 <Input
                   type="month"
-                  value={medDateFilter}
-                  onChange={(e) => setMedDateFilter(e.target.value)}
+                  value={diagDateFilter}
+                  onChange={(e) => setDiagDateFilter(e.target.value)}
                   className="h-8 w-36 text-sm"
                   placeholder="Ay seç"
                 />
-                {(medSearchTerm || medDateFilter) && (
+                {(diagSearchTerm || diagDateFilter) && (
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => { setMedSearchTerm(""); setMedDateFilter(""); }}
+                    onClick={() => { setDiagSearchTerm(""); setDiagDateFilter(""); }}
                     className="h-8 px-2"
                   >
                     <X className="w-3.5 h-3.5" />
@@ -604,29 +591,37 @@ export const PatientDetailView = ({ patientId, onBack, onAppointmentSelect }: Pa
         <CardContent>
           {medications.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
-              <Pill className="w-10 h-10 mx-auto mb-3 opacity-30" />
-              <p>Henüz ilaç kaydı yok</p>
+              <Stethoscope className="w-10 h-10 mx-auto mb-3 opacity-30" />
+              <p>Henüz tanı kaydı yok</p>
             </div>
-          ) : filteredMedications.length === 0 ? (
+          ) : filteredDiagnoses.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
               <Search className="w-10 h-10 mx-auto mb-3 opacity-30" />
-              <p>Filtrelerle eşleşen ilaç bulunamadı</p>
+              <p>Filtrelerle eşleşen tanı bulunamadı</p>
             </div>
           ) : (
             <div className="space-y-3">
-              {filteredMedications.map((med) => (
+              {filteredDiagnoses.map((med, index) => (
                 <div
                   key={med.id}
                   className="flex items-start justify-between p-4 rounded-lg bg-muted/50 border"
                 >
                   <div className="flex items-start gap-3">
                     <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                      <Pill className="w-4 h-4 text-primary" />
+                      <Stethoscope className="w-4 h-4 text-primary" />
                     </div>
                     <div>
-                      <p className="font-semibold">{med.medication_name}</p>
+                      <div className="flex items-center gap-2">
+                        <p className="font-semibold">{med.medication_name}</p>
+                        {getDiagnosisChanged(index) && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
+                            <BadgeAlert className="w-3 h-3" />
+                            Tanı Değişti
+                          </span>
+                        )}
+                      </div>
                       {med.dosage && (
-                        <p className="text-sm text-muted-foreground">Doz: {med.dosage}</p>
+                        <p className="text-sm text-muted-foreground">Detay: {med.dosage}</p>
                       )}
                       {med.instructions && (
                         <p className="text-sm text-muted-foreground mt-1">{med.instructions}</p>

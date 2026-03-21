@@ -5,12 +5,10 @@ export interface Patient {
   doctor_id: string;
   full_name: string;
   phone: string | null;
-  email: string | null;
   date_of_birth: string | null;
   gender: string | null;
   address: string | null;
-  emergency_phone: string | null;
-  tc_identity: string | null;
+  meslek: string | null;
   notes: string | null;
   created_at: string;
   updated_at: string;
@@ -20,12 +18,10 @@ export interface PatientInsert {
   full_name: string;
   doctor_id: string;
   phone?: string | null;
-  email?: string | null;
   date_of_birth?: string | null;
   gender?: string | null;
   address?: string | null;
-  emergency_phone?: string | null;
-  tc_identity?: string | null;
+  meslek?: string | null;
   notes?: string | null;
 }
 

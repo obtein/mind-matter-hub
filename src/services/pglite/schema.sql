@@ -55,13 +55,11 @@ CREATE TABLE IF NOT EXISTS public.patients (
     doctor_id TEXT NOT NULL,
     full_name TEXT NOT NULL,
     phone TEXT,
-    email TEXT,
     date_of_birth DATE,
     notes TEXT,
     gender TEXT,
     address TEXT,
-    emergency_phone TEXT,
-    tc_identity TEXT,
+    meslek TEXT,
     created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
     updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now()
 );

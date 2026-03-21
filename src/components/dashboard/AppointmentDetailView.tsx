@@ -12,11 +12,10 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { ArrowLeft, Plus, Pill, Save, Calendar, Clock, Trash2, Loader2, FileText, CheckCircle, XCircle, Download, Bell } from "lucide-react";
+import { ArrowLeft, Plus, Stethoscope, Save, Calendar, Clock, Trash2, Loader2, FileText, CheckCircle, XCircle, Bell } from "lucide-react";
 import { format } from "date-fns";
 import { tr } from "date-fns/locale";
 import { checkAppointmentConflict } from "@/lib/appointmentUtils";
-import { generatePrescriptionPdf } from "@/lib/prescriptionPdf";
 import { handleError } from "@/lib/errorHandler";
 
 interface Appointment {
@@ -152,7 +151,7 @@ export const AppointmentDetailView = ({ appointmentId, patientId, onBack }: Appo
     e.preventDefault();
 
     if (!medicationForm.medication_name.trim()) {
-      toast.error("İlaç adı boş olamaz");
+      toast.error("Tanı boş olamaz");
       return;
     }
 
@@ -164,22 +163,22 @@ export const AppointmentDetailView = ({ appointmentId, patientId, onBack }: Appo
         instructions: medicationForm.instructions || null,
       });
 
-      toast.success("İlaç eklendi");
+      toast.success("Tanı eklendi");
       setIsMedicationDialogOpen(false);
       setMedicationForm({ medication_name: "", dosage: "", instructions: "" });
       fetchData();
     } catch (error: any) {
-      toast.error("İlaç eklenemedi");
+      toast.error("Tanı eklenemedi");
     }
   };
 
   const handleDeleteMedication = async (id: string) => {
     try {
       await db.deleteMedication(id);
-      toast.success("İlaç silindi");
+      toast.success("Tanı silindi");
       fetchData();
     } catch {
-      toast.error("İlaç silinemedi");
+      toast.error("Tanı silinemedi");
     }
   };
 
@@ -246,26 +245,6 @@ export const AppointmentDetailView = ({ appointmentId, patientId, onBack }: Appo
       });
     } catch (error: any) {
       toast.error("Randevu oluşturulamadı");
-    }
-  };
-
-  const handleDownloadPrescription = async () => {
-    try {
-      // Get doctor's name
-      const profile = await db.getProfile();
-
-      const doctorName = profile?.full_name || "Doktor";
-
-      await generatePrescriptionPdf({
-        patientName: patient?.full_name || "",
-        appointmentDate: format(new Date(appointment!.appointment_date), "d MMMM yyyy", { locale: tr }),
-        doctorName,
-        medications,
-      });
-
-      toast.success("Reçete PDF olarak indirildi");
-    } catch (error) {
-      toast.error("PDF oluşturulamadı");
     }
   };
 
@@ -487,59 +466,53 @@ export const AppointmentDetailView = ({ appointmentId, patientId, onBack }: Appo
         </CardContent>
       </Card>
 
-      {/* Medications Section */}
+      {/* Diagnosis Section */}
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle className="flex items-center gap-2">
-              <Pill className="w-5 h-5 text-primary" />
-              Reçete / İlaçlar
+              <Stethoscope className="w-5 h-5 text-primary" />
+              Tanı
             </CardTitle>
             <div className="flex items-center gap-2">
-              {medications.length > 0 && (
-                <Button variant="outline" size="sm" onClick={handleDownloadPrescription}>
-                  <Download className="w-4 h-4 mr-2" />
-                  PDF İndir
-                </Button>
-              )}
               <Dialog open={isMedicationDialogOpen} onOpenChange={setIsMedicationDialogOpen}>
                 <DialogTrigger asChild>
                   <Button size="sm">
                     <Plus className="w-4 h-4 mr-2" />
-                    İlaç Ekle
+                    Tanı Ekle
                   </Button>
                 </DialogTrigger>
                 <DialogContent className="sm:max-w-md">
                 <DialogHeader>
-                  <DialogTitle className="font-display">İlaç Ekle</DialogTitle>
+                  <DialogTitle className="font-display">Tanı Ekle</DialogTitle>
                 </DialogHeader>
                 <form onSubmit={handleAddMedication} className="space-y-4">
                   <div className="space-y-2">
-                    <Label htmlFor="med_name">İlaç Adı *</Label>
+                    <Label htmlFor="med_name">Tanı *</Label>
                     <Input
                       id="med_name"
                       value={medicationForm.medication_name}
                       onChange={(e) => setMedicationForm({ ...medicationForm, medication_name: e.target.value })}
-                      placeholder="Örn: Prozac"
+                      placeholder="Örn: Yaygın Anksiyete Bozukluğu"
                       required
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="dosage">Doz</Label>
+                    <Label htmlFor="dosage">Detay</Label>
                     <Input
                       id="dosage"
                       value={medicationForm.dosage}
                       onChange={(e) => setMedicationForm({ ...medicationForm, dosage: e.target.value })}
-                      placeholder="Örn: 20mg"
+                      placeholder="Örn: F41.1"
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="instructions">Kullanım Talimatı</Label>
+                    <Label htmlFor="instructions">Notlar</Label>
                     <Textarea
                       id="instructions"
                       value={medicationForm.instructions}
                       onChange={(e) => setMedicationForm({ ...medicationForm, instructions: e.target.value })}
-                      placeholder="Örn: Günde 1 kez, sabah aç karnına"
+                      placeholder="Tanı ile ilgili ek notlar..."
                       rows={2}
                     />
                   </div>
@@ -555,8 +528,8 @@ export const AppointmentDetailView = ({ appointmentId, patientId, onBack }: Appo
         <CardContent>
           {medications.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
-              <Pill className="w-10 h-10 mx-auto mb-3 opacity-30" />
-              <p>Henüz ilaç eklenmemiş</p>
+              <Stethoscope className="w-10 h-10 mx-auto mb-3 opacity-30" />
+              <p>Henüz tanı eklenmemiş</p>
             </div>
           ) : (
             <div className="space-y-3">
@@ -568,7 +541,7 @@ export const AppointmentDetailView = ({ appointmentId, patientId, onBack }: Appo
                   <div>
                     <p className="font-semibold">{med.medication_name}</p>
                     {med.dosage && (
-                      <p className="text-sm text-muted-foreground">Doz: {med.dosage}</p>
+                      <p className="text-sm text-muted-foreground">Detay: {med.dosage}</p>
                     )}
                     {med.instructions && (
                       <p className="text-sm text-muted-foreground mt-1">{med.instructions}</p>
@@ -590,8 +563,8 @@ export const AppointmentDetailView = ({ appointmentId, patientId, onBack }: Appo
           <AlertDialog open={!!deleteMedicationId} onOpenChange={(open) => !open && setDeleteMedicationId(null)}>
             <AlertDialogContent>
               <AlertDialogHeader>
-                <AlertDialogTitle>İlaç Silme</AlertDialogTitle>
-                <AlertDialogDescription>Bu ilacı silmek istediğinizden emin misiniz?</AlertDialogDescription>
+                <AlertDialogTitle>Tanı Silme</AlertDialogTitle>
+                <AlertDialogDescription>Bu tanıyı silmek istediğinizden emin misiniz?</AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
                 <AlertDialogCancel>İptal</AlertDialogCancel>

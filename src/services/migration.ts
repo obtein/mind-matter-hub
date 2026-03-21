@@ -114,21 +114,19 @@ export async function migrateFromSupabase(
       const p = data.patients[i];
       const doctorId = p.doctor_id === SUPABASE_USER_ID ? localUserId : p.doctor_id;
       await db.query(
-        `INSERT INTO patients (id, doctor_id, full_name, phone, email, date_of_birth, notes, gender, address, emergency_phone, tc_identity, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+        `INSERT INTO patients (id, doctor_id, full_name, phone, date_of_birth, notes, gender, address, meslek, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
          ON CONFLICT (id) DO NOTHING`,
         [
           p.id,
           doctorId,
           p.full_name,
           p.phone,
-          p.email,
           p.date_of_birth,
           p.notes,
           p.gender,
           p.address,
-          p.emergency_phone,
-          p.tc_identity,
+          (p as any).meslek ?? null,
           p.created_at,
           p.updated_at,
         ]
