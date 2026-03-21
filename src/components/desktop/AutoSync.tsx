@@ -1,6 +1,5 @@
 import { useEffect } from "react";
 import { IS_TAURI } from "@/lib/platform";
-import { toast } from "sonner";
 
 export const AutoSync = () => {
   useEffect(() => {
@@ -14,25 +13,22 @@ export const AutoSync = () => {
         const appWindow = getCurrentWindow();
 
         unlisten = await appWindow.onCloseRequested(async (event) => {
-          // Kapanmayı durdur, sync yap, sonra kapat
           event.preventDefault();
 
-          const { hasSyncCredentials, syncToSupabase } = await import("@/services/supabase-sync");
-          const hasCredentials = await hasSyncCredentials();
+          try {
+            const { hasSyncCredentials, syncToSupabase } = await import("@/services/supabase-sync");
 
-          if (hasCredentials) {
-            toast.info("Veriler yedekleniyor...", { id: "auto-sync", duration: Infinity });
-
-            const result = await syncToSupabase();
-
-            if (result.success) {
-              toast.success("Yedekleme tamamlandi", { id: "auto-sync", duration: 1000 });
-            } else {
-              console.error("Sync failed:", result.message);
+            if (await hasSyncCredentials()) {
+              // Max 15 saniye bekle, sonra yine de kapat
+              const syncPromise = syncToSupabase();
+              const timeoutPromise = new Promise((resolve) => setTimeout(resolve, 15000));
+              await Promise.race([syncPromise, timeoutPromise]);
             }
+          } catch (err) {
+            console.error("AutoSync error:", err);
           }
 
-          // Sync bitti (veya credentials yok), uygulamayı kapat
+          // Her durumda kapat
           await appWindow.destroy();
         });
       } catch (err) {
