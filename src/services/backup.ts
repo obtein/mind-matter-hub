@@ -180,35 +180,71 @@ export async function importBackup(buffer: ArrayBuffer, password: string): Promi
   }
 }
 
-// ── File helpers (for Tauri) ──
+// ── Platform detection ──
+
+function isTauri(): boolean {
+  return !!(window as any).__TAURI_INTERNALS__;
+}
+
+// ── File helpers ──
 
 export async function downloadBackup(password: string): Promise<void> {
   const { data, filename } = await exportBackup(password);
 
-  const { save } = await import("@tauri-apps/plugin-dialog");
-  const { writeFile } = await import("@tauri-apps/plugin-fs");
+  if (isTauri()) {
+    const { save } = await import("@tauri-apps/plugin-dialog");
+    const { writeFile } = await import("@tauri-apps/plugin-fs");
 
-  const path = await save({
-    defaultPath: filename,
-    filters: [{ name: "PsiTrak Yedek", extensions: ["phub"] }],
-  });
+    const path = await save({
+      defaultPath: filename,
+      filters: [{ name: "PsiTrak Yedek", extensions: ["phub"] }],
+    });
 
-  if (!path) return;
-  await writeFile(path, new Uint8Array(data));
+    if (!path) return;
+    await writeFile(path, new Uint8Array(data));
+  } else {
+    // Web fallback — trigger browser download
+    const blob = new Blob([data], { type: "application/octet-stream" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
 }
 
 export async function uploadAndRestoreBackup(password: string): Promise<void> {
-  const { open } = await import("@tauri-apps/plugin-dialog");
-  const { readFile } = await import("@tauri-apps/plugin-fs");
+  if (isTauri()) {
+    const { open } = await import("@tauri-apps/plugin-dialog");
+    const { readFile } = await import("@tauri-apps/plugin-fs");
 
-  const path = await open({
-    filters: [{ name: "PsiTrak Yedek", extensions: ["phub"] }],
-    multiple: false,
-  });
+    const path = await open({
+      filters: [{ name: "PsiTrak Yedek", extensions: ["phub"] }],
+      multiple: false,
+    });
 
-  if (!path) return;
-  const fileContent = await readFile(path as string);
-  const buffer = fileContent.buffer as ArrayBuffer;
+    if (!path) return;
+    const fileContent = await readFile(path as string);
+    const buffer = fileContent.buffer as ArrayBuffer;
 
-  await importBackup(buffer, password);
+    await importBackup(buffer, password);
+  } else {
+    // Web fallback — file picker via <input>
+    const buffer = await new Promise<ArrayBuffer>((resolve, reject) => {
+      const input = document.createElement("input");
+      input.type = "file";
+      input.accept = ".phub";
+      input.onchange = async () => {
+        const file = input.files?.[0];
+        if (!file) return reject(new Error("Dosya seçilmedi"));
+        resolve(await file.arrayBuffer());
+      };
+      input.click();
+    });
+
+    await importBackup(buffer, password);
+  }
 }

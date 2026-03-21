@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import type { ViewState } from "@/pages/Dashboard";
 import type { AppUser } from "@/services/auth";
 import { IS_TAURI } from "@/lib/platform";
+import { MigrationButton } from "@/components/migration/MigrationButton";
 import psiTrakLogo from "/favicon.png";
 import { PasswordDialog } from "@/components/ui/password-dialog";
 import {
@@ -233,6 +234,7 @@ export const DashboardSidebar = ({ viewState, setViewState, user }: DashboardSid
               </SidebarMenuButton>
             </div>
           )}
+          <MigrationButton />
           <SidebarMenuButton onClick={handleLogout} className="w-full text-destructive hover:text-destructive">
             <LogOut className="w-5 h-5" />
             <span>Çıkış Yap</span>
