@@ -1,9 +1,9 @@
-name: Build & Release Desktop App
+name: "Build & Release Desktop App"
 
 on:
   push:
     tags:
-      - 'v*'
+      - "v*"
   workflow_dispatch:
 
 permissions:
@@ -12,7 +12,7 @@ permissions:
 jobs:
   build-windows:
     runs-on: windows-latest
-    name: Build (Windows x64)
+    name: "Build (Windows x64)"
 
     steps:
       - name: Checkout
@@ -21,7 +21,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: "20"
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -31,7 +31,7 @@ jobs:
       - name: Rust cache
         uses: swatinem/rust-cache@v2
         with:
-          workspaces: src-tauri -> target
+          workspaces: "src-tauri -> target"
 
       - name: Install dependencies
         run: npm install
@@ -43,16 +43,9 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
-          tagName: ${{ github.ref_name }}
-          releaseName: 'PsiTrak ${{ github.ref_name }}'
-          releaseBody: |
-            ## PsiTrak ${{ github.ref_name }}
-
-            ### Kurulum
-            `.msi` dosyasını indirip çalıştırın.
-
-            ### Güncelleme
-            Mevcut kullanıcılar uygulama içinden otomatik güncelleme alacaktır.
+          tagName: v__VERSION__
+          releaseName: "PsiTrak v__VERSION__"
+          releaseBody: "PsiTrak yeni sürüm. MSI dosyasini indirip kurulum yapabilirsiniz. Mevcut kullanicilar uygulama icinden otomatik guncelleme alacaktir."
           releaseDraft: false
           prerelease: false
           includeUpdaterJson: true
