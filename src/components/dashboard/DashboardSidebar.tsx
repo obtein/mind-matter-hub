@@ -216,12 +216,22 @@ export const DashboardSidebar = ({ viewState, setViewState, user }: DashboardSid
             </div>
           )}
           {!IS_TAURI && (
-            <SidebarMenuButton asChild className="w-full mb-3">
-              <a href="/downloads/PsiTrak_0.1.0_x64_en-US.msi" download>
-                <Monitor className="w-5 h-5" />
-                <span>Masaüstü Uygulamayı İndir</span>
-              </a>
-            </SidebarMenuButton>
+            <div className="flex flex-col gap-2 mb-3">
+              <SidebarMenuButton
+                onClick={handleWebBackup}
+                disabled={webBackupLoading}
+                className="w-full"
+              >
+                {webBackupLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Database className="w-5 h-5" />}
+                <span>Verileri Yedekle (JSON)</span>
+              </SidebarMenuButton>
+              <SidebarMenuButton asChild className="w-full">
+                <a href="/downloads/PsiTrak_0.1.0_x64_en-US.msi" download>
+                  <Monitor className="w-5 h-5" />
+                  <span>Masaüstü Uygulamayı İndir</span>
+                </a>
+              </SidebarMenuButton>
+            </div>
           )}
           <SidebarMenuButton onClick={handleLogout} className="w-full text-destructive hover:text-destructive">
             <LogOut className="w-5 h-5" />
