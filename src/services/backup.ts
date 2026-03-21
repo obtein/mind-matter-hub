@@ -201,7 +201,12 @@ export async function downloadBackup(password: string): Promise<void> {
     });
 
     if (!path) return;
-    await writeFile(path, new Uint8Array(data));
+    try {
+      await writeFile(path, new Uint8Array(data));
+    } catch (err) {
+      console.error("writeFile error:", err, "path:", path);
+      throw new Error("Dosya yazılamadı: " + (err instanceof Error ? err.message : String(err)));
+    }
   } else {
     // Web fallback — trigger browser download
     const blob = new Blob([data], { type: "application/octet-stream" });
