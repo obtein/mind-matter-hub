@@ -10,6 +10,7 @@ import { StatisticsView } from "@/components/dashboard/StatisticsView";
 import { MedicationsReportView } from "@/components/dashboard/MedicationsReportView";
 import { NotificationBell } from "@/components/dashboard/NotificationBell";
 import { UpdateChecker } from "@/components/desktop/UpdateChecker";
+import { AutoSync } from "@/components/desktop/AutoSync";
 import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui/sidebar";
 import type { AppUser } from "@/services/auth";
 
@@ -20,8 +21,6 @@ export interface ViewState {
   patientId?: string;
   appointmentId?: string;
 }
-
-const SESSION_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -52,28 +51,6 @@ const Dashboard = () => {
     return () => sub.unsubscribe();
   }, [navigate]);
 
-  // Session timeout - auto-logout after 30 minutes of inactivity
-  useEffect(() => {
-    let timeoutId: ReturnType<typeof setTimeout>;
-
-    const resetTimer = () => {
-      clearTimeout(timeoutId);
-      timeoutId = setTimeout(async () => {
-        await auth.signOut();
-        navigate("/");
-      }, SESSION_TIMEOUT_MS);
-    };
-
-    const events = ["mousedown", "keydown", "scroll", "touchstart"];
-    events.forEach((event) => window.addEventListener(event, resetTimer));
-    resetTimer();
-
-    return () => {
-      clearTimeout(timeoutId);
-      events.forEach((event) => window.removeEventListener(event, resetTimer));
-    };
-  }, [auth, navigate]);
-
   const navigateTo = (newState: ViewState) => {
     setViewState(newState);
   };
@@ -91,6 +68,7 @@ const Dashboard = () => {
   return (
     <SidebarProvider>
       <UpdateChecker />
+      <AutoSync />
       <div className="min-h-screen flex w-full bg-background">
         <DashboardSidebar 
           viewState={viewState}
