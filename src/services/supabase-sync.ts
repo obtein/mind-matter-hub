@@ -107,9 +107,9 @@ export async function syncFromSupabase(
       onProgress?.({ step: "Hastalar ekleniyor...", percent: 60 });
       for (const r of data.patients as any[]) {
         await db.query(
-          `INSERT INTO patients (id,doctor_id,full_name,phone,email,date_of_birth,notes,gender,address,emergency_phone,tc_identity,created_at,updated_at)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) ON CONFLICT(id) DO NOTHING`,
-          [r.id, localUserId, r.full_name, r.phone, r.email, r.date_of_birth, r.notes, r.gender, r.address, r.emergency_phone, r.tc_identity, r.created_at, r.updated_at]
+          `INSERT INTO patients (id,doctor_id,full_name,phone,date_of_birth,notes,gender,address,meslek,created_at,updated_at)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) ON CONFLICT(id) DO NOTHING`,
+          [r.id, localUserId, r.full_name, r.phone, r.date_of_birth, r.notes, r.gender, r.address, r.meslek ?? null, r.created_at, r.updated_at]
         );
       }
 

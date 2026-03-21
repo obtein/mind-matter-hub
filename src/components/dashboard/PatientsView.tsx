@@ -12,22 +12,19 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Plus, Search, User, Phone, Trash2, Edit, Loader2, ChevronRight, MapPin, IdCard, Calendar, AlertCircle } from "lucide-react";
+import { Plus, Search, User, Phone, Trash2, Edit, Loader2, ChevronRight, MapPin, Calendar } from "lucide-react";
 import { format } from "date-fns";
 import { tr } from "date-fns/locale";
-import { isValidTCIdentity, formatTCIdentity } from "@/lib/validation";
 import { handleError } from "@/lib/errorHandler";
 
 interface Patient {
   id: string;
   full_name: string;
   phone: string | null;
-  email: string | null;
   date_of_birth: string | null;
   gender: string | null;
   address: string | null;
-  emergency_phone: string | null;
-  tc_identity: string | null;
+  meslek: string | null;
   notes: string | null;
   created_at: string;
   last_appointment?: string | null;
@@ -46,17 +43,14 @@ export const PatientsView = ({ onPatientSelect }: PatientsViewProps) => {
   const [genderFilter, setGenderFilter] = useState<string>("all");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingPatient, setEditingPatient] = useState<Patient | null>(null);
-  const [tcError, setTcError] = useState<string | null>(null);
   const [deletePatientId, setDeletePatientId] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     full_name: "",
     phone: "",
-    email: "",
     date_of_birth: "",
     gender: "",
     address: "",
-    emergency_phone: "",
-    tc_identity: "",
+    meslek: "",
     notes: "",
   });
 
@@ -86,18 +80,6 @@ export const PatientsView = ({ onPatientSelect }: PatientsViewProps) => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    // Validate TC identity if provided
-    if (formData.tc_identity && !isValidTCIdentity(formData.tc_identity)) {
-      setTcError("Geçersiz TC kimlik numarası");
-      return;
-    }
-
-    // Validate email format if provided
-    if (formData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
-      toast.error("Geçersiz e-posta adresi");
-      return;
-    }
 
     // Validate phone format if provided (Turkish phone: digits, spaces, +, -, parens)
     if (formData.phone && !/^[0-9\s\-+()]{7,15}$/.test(formData.phone)) {
@@ -105,11 +87,6 @@ export const PatientsView = ({ onPatientSelect }: PatientsViewProps) => {
       return;
     }
 
-    if (formData.emergency_phone && !/^[0-9\s\-+()]{7,15}$/.test(formData.emergency_phone)) {
-      toast.error("Geçersiz acil durum telefon numarası");
-      return;
-    }
-    
     try {
       const user = await auth.getUser();
       if (!user) throw new Error("Kullanıcı bulunamadı");
@@ -117,12 +94,10 @@ export const PatientsView = ({ onPatientSelect }: PatientsViewProps) => {
       const patientData = {
         full_name: formData.full_name,
         phone: formData.phone || null,
-        email: formData.email || null,
         date_of_birth: formData.date_of_birth || null,
         gender: formData.gender || null,
         address: formData.address || null,
-        emergency_phone: formData.emergency_phone || null,
-        tc_identity: formData.tc_identity || null,
+        meslek: formData.meslek || null,
         notes: formData.notes || null,
       };
 
@@ -161,12 +136,10 @@ export const PatientsView = ({ onPatientSelect }: PatientsViewProps) => {
     setFormData({
       full_name: patient.full_name,
       phone: patient.phone || "",
-      email: patient.email || "",
       date_of_birth: patient.date_of_birth || "",
       gender: patient.gender || "",
       address: patient.address || "",
-      emergency_phone: patient.emergency_phone || "",
-      tc_identity: patient.tc_identity || "",
+      meslek: patient.meslek || "",
       notes: patient.notes || "",
     });
     setIsDialogOpen(true);
@@ -174,33 +147,15 @@ export const PatientsView = ({ onPatientSelect }: PatientsViewProps) => {
 
   const resetForm = () => {
     setEditingPatient(null);
-    setTcError(null);
     setFormData({
       full_name: "",
       phone: "",
-      email: "",
       date_of_birth: "",
       gender: "",
       address: "",
-      emergency_phone: "",
-      tc_identity: "",
+      meslek: "",
       notes: "",
     });
-  };
-
-  const handleTCChange = (value: string) => {
-    const formatted = formatTCIdentity(value);
-    setFormData({ ...formData, tc_identity: formatted });
-    
-    if (formatted.length === 11) {
-      if (!isValidTCIdentity(formatted)) {
-        setTcError("Geçersiz TC kimlik numarası");
-      } else {
-        setTcError(null);
-      }
-    } else {
-      setTcError(null);
-    }
   };
 
   const openNewDialog = () => {
@@ -209,13 +164,12 @@ export const PatientsView = ({ onPatientSelect }: PatientsViewProps) => {
   };
 
   const filteredPatients = patients.filter((p) => {
-    const matchesSearch = 
+    const matchesSearch =
       p.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      p.tc_identity?.includes(searchTerm) ||
       p.phone?.includes(searchTerm);
-    
+
     const matchesGender = genderFilter === "all" || p.gender === genderFilter;
-    
+
     return matchesSearch && matchesGender;
   });
 
@@ -271,23 +225,6 @@ export const PatientsView = ({ onPatientSelect }: PatientsViewProps) => {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="tc_identity">TC Kimlik No</Label>
-                  <Input
-                    id="tc_identity"
-                    value={formData.tc_identity}
-                    onChange={(e) => handleTCChange(e.target.value)}
-                    maxLength={11}
-                    className={tcError ? "border-destructive" : ""}
-                    placeholder="11 haneli TC kimlik numarası"
-                  />
-                  {tcError && (
-                    <div className="flex items-center gap-1 text-sm text-destructive">
-                      <AlertCircle className="w-3 h-3" />
-                      <span>{tcError}</span>
-                    </div>
-                  )}
-                </div>
-                <div className="space-y-2">
                   <Label htmlFor="gender">Cinsiyet</Label>
                   <Select
                     value={formData.gender}
@@ -322,21 +259,12 @@ export const PatientsView = ({ onPatientSelect }: PatientsViewProps) => {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="emergency_phone">Yakın Telefonu</Label>
+                  <Label htmlFor="meslek">Meslek</Label>
                   <Input
-                    id="emergency_phone"
-                    type="tel"
-                    value={formData.emergency_phone}
-                    onChange={(e) => setFormData({ ...formData, emergency_phone: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="email">E-posta</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    value={formData.email}
-                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                    id="meslek"
+                    value={formData.meslek}
+                    onChange={(e) => setFormData({ ...formData, meslek: e.target.value })}
+                    placeholder="Örn: Mühendis, Öğretmen"
                   />
                 </div>
               </div>
@@ -370,7 +298,7 @@ export const PatientsView = ({ onPatientSelect }: PatientsViewProps) => {
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
-            placeholder="Ad, TC kimlik veya telefon ile ara..."
+            placeholder="Ad veya telefon ile ara..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="pl-10"
@@ -403,12 +331,18 @@ export const PatientsView = ({ onPatientSelect }: PatientsViewProps) => {
       <div className="flex items-center justify-between px-4 py-3 bg-muted/50 rounded-lg border">
         <div className="flex items-center gap-2 text-sm">
           <User className="w-4 h-4 text-muted-foreground" />
-          <span className="font-medium">{filteredPatients.length}</span>
-          <span className="text-muted-foreground">
-            {filteredPatients.length === patients.length 
-              ? "hasta" 
-              : `/ ${patients.length} hasta`}
-          </span>
+          {searchTerm.length >= 2 ? (
+            <>
+              <span className="font-medium">{Math.min(filteredPatients.length, 20)}</span>
+              <span className="text-muted-foreground">
+                {filteredPatients.length > 20
+                  ? `/ ${filteredPatients.length} sonuç (ilk 20 gösteriliyor)`
+                  : `/ ${patients.length} hasta`}
+              </span>
+            </>
+          ) : (
+            <span className="text-muted-foreground">{patients.length} kayıtlı hasta</span>
+          )}
         </div>
         {(searchTerm || genderFilter !== "all") && (
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -429,24 +363,26 @@ export const PatientsView = ({ onPatientSelect }: PatientsViewProps) => {
         )}
       </div>
 
-      {filteredPatients.length === 0 ? (
+      {searchTerm.length < 2 ? (
+        <Card className="border-dashed">
+          <CardContent className="flex flex-col items-center justify-center py-12">
+            <Search className="w-12 h-12 text-muted-foreground/50 mb-4" />
+            <p className="text-muted-foreground text-center">
+              Hasta aramak için yukarıdaki arama kutusunu kullanın
+            </p>
+            <p className="text-sm text-muted-foreground mt-1">En az 2 karakter yazın</p>
+          </CardContent>
+        </Card>
+      ) : filteredPatients.length === 0 ? (
         <Card className="border-dashed">
           <CardContent className="flex flex-col items-center justify-center py-12">
             <User className="w-12 h-12 text-muted-foreground/50 mb-4" />
-            <p className="text-muted-foreground text-center">
-              {searchTerm ? "Sonuç bulunamadı" : "Henüz hasta eklenmemiş"}
-            </p>
-            {!searchTerm && (
-              <Button variant="outline" className="mt-4" onClick={openNewDialog}>
-                <Plus className="w-4 h-4 mr-2" />
-                İlk hastanızı ekleyin
-              </Button>
-            )}
+            <p className="text-muted-foreground text-center">Sonuç bulunamadı</p>
           </CardContent>
         </Card>
       ) : (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {filteredPatients.map((patient, index) => (
+          {filteredPatients.slice(0, 20).map((patient, index) => (
             <Card 
               key={patient.id} 
               className="group hover:shadow-medium transition-all duration-300 animate-slide-up cursor-pointer"
@@ -476,12 +412,6 @@ export const PatientsView = ({ onPatientSelect }: PatientsViewProps) => {
                 </div>
               </CardHeader>
               <CardContent className="space-y-2 text-sm">
-                {patient.tc_identity && (
-                  <div className="flex items-center gap-2 text-muted-foreground">
-                    <IdCard className="w-4 h-4" />
-                    <span>{patient.tc_identity}</span>
-                  </div>
-                )}
                 {patient.phone && (
                   <div className="flex items-center gap-2 text-muted-foreground">
                     <Phone className="w-4 h-4" />

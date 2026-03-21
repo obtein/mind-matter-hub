@@ -39,10 +39,10 @@ export class PGliteDbService implements DbService {
   async createPatient(data: PatientInsert): Promise<Patient> {
     const db = await getPGlite();
     const { rows } = await db.query<Patient>(
-      `INSERT INTO patients (doctor_id, full_name, phone, email, date_of_birth, gender, address, emergency_phone, tc_identity, notes)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+      `INSERT INTO patients (doctor_id, full_name, phone, date_of_birth, gender, address, meslek, notes)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        RETURNING *`,
-      [data.doctor_id, data.full_name, data.phone ?? null, data.email ?? null, data.date_of_birth ?? null, data.gender ?? null, data.address ?? null, data.emergency_phone ?? null, data.tc_identity ?? null, data.notes ?? null]
+      [data.doctor_id, data.full_name, data.phone ?? null, data.date_of_birth ?? null, data.gender ?? null, data.address ?? null, data.meslek ?? null, data.notes ?? null]
     );
     return rows[0];
   }
