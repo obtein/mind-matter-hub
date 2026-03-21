@@ -185,61 +185,30 @@ export async function importBackup(buffer: ArrayBuffer, password: string): Promi
 export async function downloadBackup(password: string): Promise<void> {
   const { data, filename } = await exportBackup(password);
 
-  // In Tauri, use dialog + fs plugins
-  if ("__TAURI__" in window) {
-    const { save } = await import("@tauri-apps/plugin-dialog");
-    const { writeFile } = await import("@tauri-apps/plugin-fs");
+  const { save } = await import("@tauri-apps/plugin-dialog");
+  const { writeFile } = await import("@tauri-apps/plugin-fs");
 
-    const path = await save({
-      defaultPath: filename,
-      filters: [{ name: "PsiTrak Yedek", extensions: ["phub"] }],
-    });
+  const path = await save({
+    defaultPath: filename,
+    filters: [{ name: "PsiTrak Yedek", extensions: ["phub"] }],
+  });
 
-    if (path) {
-      await writeFile(path, new Uint8Array(data));
-    }
-    return;
-  }
-
-  // Fallback for web: browser download
-  const blob = new Blob([data], { type: "application/octet-stream" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
+  if (!path) return;
+  await writeFile(path, new Uint8Array(data));
 }
 
 export async function uploadAndRestoreBackup(password: string): Promise<void> {
-  let buffer: ArrayBuffer;
+  const { open } = await import("@tauri-apps/plugin-dialog");
+  const { readFile } = await import("@tauri-apps/plugin-fs");
 
-  if ("__TAURI__" in window) {
-    const { open } = await import("@tauri-apps/plugin-dialog");
-    const { readFile } = await import("@tauri-apps/plugin-fs");
+  const path = await open({
+    filters: [{ name: "PsiTrak Yedek", extensions: ["phub"] }],
+    multiple: false,
+  });
 
-    const path = await open({
-      filters: [{ name: "PsiTrak Yedek", extensions: ["phub"] }],
-      multiple: false,
-    });
-
-    if (!path) return;
-    const fileContent = await readFile(path as string);
-    buffer = fileContent.buffer as ArrayBuffer;
-  } else {
-    // Fallback for web: file input
-    buffer = await new Promise<ArrayBuffer>((resolve, reject) => {
-      const input = document.createElement("input");
-      input.type = "file";
-      input.accept = ".phub";
-      input.onchange = async () => {
-        const file = input.files?.[0];
-        if (!file) return reject(new Error("Dosya seçilmedi"));
-        resolve(await file.arrayBuffer());
-      };
-      input.click();
-    });
-  }
+  if (!path) return;
+  const fileContent = await readFile(path as string);
+  const buffer = fileContent.buffer as ArrayBuffer;
 
   await importBackup(buffer, password);
 }

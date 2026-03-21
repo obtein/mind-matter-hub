@@ -21,6 +21,8 @@ export interface ViewState {
   appointmentId?: string;
 }
 
+const SESSION_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
+
 const Dashboard = () => {
   const navigate = useNavigate();
   const auth = useAuth();
@@ -49,6 +51,28 @@ const Dashboard = () => {
 
     return () => sub.unsubscribe();
   }, [navigate]);
+
+  // Session timeout - auto-logout after 30 minutes of inactivity
+  useEffect(() => {
+    let timeoutId: ReturnType<typeof setTimeout>;
+
+    const resetTimer = () => {
+      clearTimeout(timeoutId);
+      timeoutId = setTimeout(async () => {
+        await auth.signOut();
+        navigate("/");
+      }, SESSION_TIMEOUT_MS);
+    };
+
+    const events = ["mousedown", "keydown", "scroll", "touchstart"];
+    events.forEach((event) => window.addEventListener(event, resetTimer));
+    resetTimer();
+
+    return () => {
+      clearTimeout(timeoutId);
+      events.forEach((event) => window.removeEventListener(event, resetTimer));
+    };
+  }, [auth, navigate]);
 
   const navigateTo = (newState: ViewState) => {
     setViewState(newState);

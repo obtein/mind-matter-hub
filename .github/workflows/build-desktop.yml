@@ -1,4 +1,4 @@
-name: Build Desktop App
+name: Build & Release Desktop App
 
 on:
   push:
@@ -10,23 +10,9 @@ permissions:
   contents: write
 
 jobs:
-  build:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - platform: macos-latest
-            target: aarch64-apple-darwin
-            label: macOS-ARM
-          - platform: macos-latest
-            target: x86_64-apple-darwin
-            label: macOS-Intel
-          - platform: windows-latest
-            target: x86_64-pc-windows-msvc
-            label: Windows
-
-    runs-on: ${{ matrix.platform }}
-    name: Build (${{ matrix.label }})
+  build-windows:
+    runs-on: windows-latest
+    name: Build (Windows x64)
 
     steps:
       - name: Checkout
@@ -37,15 +23,10 @@ jobs:
         with:
           node-version: 20
 
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ matrix.target }}
+          targets: x86_64-pc-windows-msvc
 
       - name: Rust cache
         uses: swatinem/rust-cache@v2
@@ -53,7 +34,7 @@ jobs:
           workspaces: src-tauri -> target
 
       - name: Install dependencies
-        run: bun install
+        run: npm install
 
       - name: Build Tauri app
         uses: tauri-apps/tauri-action@v0
@@ -63,17 +44,16 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: ${{ github.ref_name }}
-          releaseName: 'PsiTrak v__VERSION__'
+          releaseName: 'PsiTrak ${{ github.ref_name }}'
           releaseBody: |
-            PsiTrak desktop uygulaması yeni sürümü.
+            ## PsiTrak ${{ github.ref_name }}
 
             ### Kurulum
-            - **macOS (Apple Silicon):** `.dmg` dosyasını indirin ve açın
-            - **macOS (Intel):** `x86_64.dmg` dosyasını indirin
-            - **Windows:** `.msi` dosyasını indirin ve kurun
+            `.msi` dosyasını indirip çalıştırın.
 
             ### Güncelleme
             Mevcut kullanıcılar uygulama içinden otomatik güncelleme alacaktır.
-          releaseDraft: true
+          releaseDraft: false
           prerelease: false
-          args: --target ${{ matrix.target }}
+          includeUpdaterJson: true
+          args: --target x86_64-pc-windows-msvc

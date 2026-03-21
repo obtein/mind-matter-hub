@@ -20,10 +20,9 @@ export const UpdateChecker = () => {
                 try {
                   toast.loading("Güncelleme indiriliyor...");
                   await update.downloadAndInstall();
-                  const { relaunch } = await import("@tauri-apps/plugin-updater");
-                  // Relaunch is not directly available from updater,
-                  // but the update.downloadAndInstall() handles restart prompt
+                  const { relaunch } = await import("@tauri-apps/plugin-process");
                   toast.success("Güncelleme tamamlandı. Uygulama yeniden başlatılıyor...");
+                  await relaunch();
                 } catch (err: any) {
                   toast.error("Güncelleme başarısız: " + (err.message || "Bilinmeyen hata"));
                 }
@@ -31,13 +30,11 @@ export const UpdateChecker = () => {
             },
           });
         }
-      } catch (error) {
+      } catch {
         // Silently fail — updater endpoint might not be configured yet
-        console.log("Update check skipped:", error);
       }
     };
 
-    // Check after a short delay so the app loads first
     const timeout = setTimeout(checkForUpdate, 5000);
     return () => clearTimeout(timeout);
   }, []);

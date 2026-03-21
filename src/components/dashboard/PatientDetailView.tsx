@@ -6,6 +6,10 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { ArrowLeft, Plus, User, Phone, Mail, MapPin, IdCard, Calendar, FileText, Trash2, ChevronRight, Loader2, Clock, Pill, Search, X, Activity, CalendarDays, CalendarCheck, CalendarClock, Timer, Bell } from "lucide-react";
@@ -62,6 +66,7 @@ export const PatientDetailView = ({ patientId, onBack, onAppointmentSelect }: Pa
   const [checkingConflict, setCheckingConflict] = useState(false);
   const [medSearchTerm, setMedSearchTerm] = useState("");
   const [medDateFilter, setMedDateFilter] = useState<string>("");
+  const [deleteAppointmentId, setDeleteAppointmentId] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     appointment_date: new Date().toISOString().split("T")[0],
     appointment_time: "09:00",
@@ -101,8 +106,8 @@ export const PatientDetailView = ({ patientId, onBack, onAppointmentSelect }: Pa
         } else {
           setConflictWarning(null);
         }
-      } catch (error) {
-        console.error("Conflict check error:", error);
+      } catch {
+        // Conflict check is non-critical
       } finally {
         setCheckingConflict(false);
       }
@@ -215,10 +220,7 @@ export const PatientDetailView = ({ patientId, onBack, onAppointmentSelect }: Pa
     }
   };
 
-  const handleDeleteAppointment = async (e: React.MouseEvent, appointmentId: string) => {
-    e.stopPropagation();
-    if (!confirm("Bu randevuyu silmek istediğinizden emin misiniz?")) return;
-
+  const handleDeleteAppointment = async (appointmentId: string) => {
     try {
       await db.deleteAppointment(appointmentId);
       toast.success("Randevu silindi");
@@ -809,7 +811,7 @@ export const PatientDetailView = ({ patientId, onBack, onAppointmentSelect }: Pa
                         variant="ghost"
                         size="icon"
                         className="opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:text-destructive"
-                        onClick={(e) => handleDeleteAppointment(e, appointment.id)}
+                        onClick={(e) => { e.stopPropagation(); setDeleteAppointmentId(appointment.id); }}
                       >
                         <Trash2 className="w-4 h-4" />
                       </Button>
@@ -821,6 +823,24 @@ export const PatientDetailView = ({ patientId, onBack, onAppointmentSelect }: Pa
             ))}
           </div>
         )}
+
+        <AlertDialog open={!!deleteAppointmentId} onOpenChange={(open) => !open && setDeleteAppointmentId(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Randevu Silme</AlertDialogTitle>
+              <AlertDialogDescription>Bu randevuyu silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.</AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>İptal</AlertDialogCancel>
+              <AlertDialogAction
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                onClick={() => { if (deleteAppointmentId) handleDeleteAppointment(deleteAppointmentId); setDeleteAppointmentId(null); }}
+              >
+                Sil
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </div>
   );

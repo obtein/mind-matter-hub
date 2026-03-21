@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Users, Calendar, LogOut, BarChart3, Pill, Download, Upload, Loader2 } from "lucide-react";
 import { useAuth } from "@/services/ServiceContext";
 import { toast } from "sonner";
@@ -6,6 +6,17 @@ import type { ViewState } from "@/pages/Dashboard";
 import type { AppUser } from "@/services/auth";
 import { IS_TAURI } from "@/lib/platform";
 import psiTrakLogo from "/favicon.png";
+import { PasswordDialog } from "@/components/ui/password-dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   Sidebar,
   SidebarContent,
@@ -25,6 +36,9 @@ interface DashboardSidebarProps {
   user: AppUser;
 }
 
+const LAST_BACKUP_KEY = "psitrak_last_backup";
+const BACKUP_REMINDER_DAYS = 7;
+
 const menuItems = [
   { type: "schedule" as const, label: "Günlük Randevular", icon: Calendar },
   { type: "patients" as const, label: "Hastalar", icon: Users },
@@ -35,26 +49,41 @@ const menuItems = [
 export const DashboardSidebar = ({ viewState, setViewState, user }: DashboardSidebarProps) => {
   const auth = useAuth();
   const [backupLoading, setBackupLoading] = useState(false);
+  const [exportPasswordOpen, setExportPasswordOpen] = useState(false);
+  const [importPasswordOpen, setImportPasswordOpen] = useState(false);
+  const [importConfirmOpen, setImportConfirmOpen] = useState(false);
+
+  // Backup reminder check
+  useEffect(() => {
+    if (!IS_TAURI) return;
+    try {
+      const lastBackup = localStorage.getItem(LAST_BACKUP_KEY);
+      if (!lastBackup) {
+        toast.warning("Henüz hiç yedek alınmamış. Verilerinizi korumak için yedek alın.", { duration: 8000 });
+        return;
+      }
+      const daysSince = Math.floor((Date.now() - new Date(lastBackup).getTime()) / (1000 * 60 * 60 * 24));
+      if (daysSince >= BACKUP_REMINDER_DAYS) {
+        toast.warning(`Son yedekten bu yana ${daysSince} gün geçti. Yedek almanız önerilir.`, { duration: 8000 });
+      }
+    } catch { /* ignore */ }
+  }, []);
 
   const handleLogout = async () => {
     try {
       await auth.signOut();
       toast.success("Çıkış yapıldı");
-    } catch (error) {
+    } catch {
       toast.error("Çıkış yapılamadı");
     }
   };
 
-  const handleExport = async () => {
-    const password = prompt("Yedek dosyası için şifre belirleyin:");
-    if (!password || password.length < 4) {
-      if (password !== null) toast.error("Şifre en az 4 karakter olmalıdır");
-      return;
-    }
+  const handleExport = async (password: string) => {
     setBackupLoading(true);
     try {
       const { downloadBackup } = await import("@/services/backup");
       await downloadBackup(password);
+      localStorage.setItem(LAST_BACKUP_KEY, new Date().toISOString());
       toast.success("Yedek başarıyla oluşturuldu");
     } catch (error: any) {
       toast.error(error.message || "Yedek oluşturulamadı");
@@ -63,10 +92,7 @@ export const DashboardSidebar = ({ viewState, setViewState, user }: DashboardSid
     }
   };
 
-  const handleImport = async () => {
-    if (!confirm("Mevcut tüm veriler silinecek ve yedekten geri yüklenecek. Devam etmek istiyor musunuz?")) return;
-    const password = prompt("Yedek dosyasının şifresini girin:");
-    if (!password) return;
+  const handleImport = async (password: string) => {
     setBackupLoading(true);
     try {
       const { uploadAndRestoreBackup } = await import("@/services/backup");
@@ -88,78 +114,124 @@ export const DashboardSidebar = ({ viewState, setViewState, user }: DashboardSid
   };
 
   return (
-    <Sidebar className="border-r border-sidebar-border">
-      <SidebarHeader className="p-4">
-        <div className="flex items-center gap-3">
-          <img src={psiTrakLogo} alt="PsiTrak Logo" className="w-10 h-10" />
-          <div>
-            <h1 className="font-display font-bold text-lg text-sidebar-foreground">PsiTrak</h1>
-            <p className="text-xs text-sidebar-foreground/60">Hasta Takip Sistemi</p>
+    <>
+      <Sidebar className="border-r border-sidebar-border">
+        <SidebarHeader className="p-4">
+          <div className="flex items-center gap-3">
+            <img src={psiTrakLogo} alt="PsiTrak Logo" className="w-10 h-10" />
+            <div>
+              <h1 className="font-display font-bold text-lg text-sidebar-foreground">PsiTrak</h1>
+              <p className="text-xs text-sidebar-foreground/60">Hasta Takip Sistemi</p>
+            </div>
           </div>
-        </div>
-      </SidebarHeader>
+        </SidebarHeader>
 
-      <SidebarContent>
-        <SidebarGroup>
-          <SidebarGroupLabel className="text-sidebar-foreground/50">Menü</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {menuItems.map((item) => (
-                <SidebarMenuItem key={item.type}>
-                  <SidebarMenuButton
-                    onClick={() => setViewState({ type: item.type })}
-                    isActive={isActive(item.type)}
-                    className="w-full"
-                  >
-                    <item.icon className="w-5 h-5" />
-                    <span>{item.label}</span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-      </SidebarContent>
+        <SidebarContent>
+          <SidebarGroup>
+            <SidebarGroupLabel className="text-sidebar-foreground/50">Menü</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {menuItems.map((item) => (
+                  <SidebarMenuItem key={item.type}>
+                    <SidebarMenuButton
+                      onClick={() => setViewState({ type: item.type })}
+                      isActive={isActive(item.type)}
+                      className="w-full"
+                    >
+                      <item.icon className="w-5 h-5" />
+                      <span>{item.label}</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        </SidebarContent>
 
-      <SidebarFooter className="p-4 border-t border-sidebar-border">
-        <div className="flex items-center gap-3 mb-4">
-          <div className="w-9 h-9 rounded-full bg-sidebar-accent flex items-center justify-center">
-            <span className="text-sm font-medium text-sidebar-foreground">
-              {user.email?.charAt(0).toUpperCase()}
-            </span>
+        <SidebarFooter className="p-4 border-t border-sidebar-border">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-9 h-9 rounded-full bg-sidebar-accent flex items-center justify-center">
+              <span className="text-sm font-medium text-sidebar-foreground">
+                {user.email?.charAt(0).toUpperCase()}
+              </span>
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-sidebar-foreground truncate">
+                {user.user_metadata?.full_name || "Doktor"}
+              </p>
+              <p className="text-xs text-sidebar-foreground/60 truncate">{user.email}</p>
+            </div>
           </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-sidebar-foreground truncate">
-              {user.user_metadata?.full_name || "Doktor"}
-            </p>
-            <p className="text-xs text-sidebar-foreground/60 truncate">{user.email}</p>
-          </div>
-        </div>
-        {IS_TAURI && (
-          <div className="flex gap-2 mb-3">
-            <SidebarMenuButton
-              onClick={handleExport}
-              disabled={backupLoading}
-              className="flex-1"
+          {IS_TAURI && (
+            <div className="flex gap-2 mb-3">
+              <SidebarMenuButton
+                onClick={() => setExportPasswordOpen(true)}
+                disabled={backupLoading}
+                className="flex-1"
+              >
+                {backupLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                <span className="text-xs">Yedekle</span>
+              </SidebarMenuButton>
+              <SidebarMenuButton
+                onClick={() => setImportConfirmOpen(true)}
+                disabled={backupLoading}
+                className="flex-1"
+              >
+                <Upload className="w-4 h-4" />
+                <span className="text-xs">Geri Yükle</span>
+              </SidebarMenuButton>
+            </div>
+          )}
+          <SidebarMenuButton onClick={handleLogout} className="w-full text-destructive hover:text-destructive">
+            <LogOut className="w-5 h-5" />
+            <span>Çıkış Yap</span>
+          </SidebarMenuButton>
+        </SidebarFooter>
+      </Sidebar>
+
+      {/* Export password dialog */}
+      <PasswordDialog
+        open={exportPasswordOpen}
+        onOpenChange={setExportPasswordOpen}
+        title="Yedek Şifresi"
+        description="Yedek dosyasını korumak için bir şifre belirleyin. Bu şifreyi unutmayın, geri yükleme sırasında gerekecektir."
+        minLength={8}
+        onConfirm={handleExport}
+      />
+
+      {/* Import confirm dialog */}
+      <AlertDialog open={importConfirmOpen} onOpenChange={setImportConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Geri Yükleme Onayı</AlertDialogTitle>
+            <AlertDialogDescription>
+              Mevcut tüm veriler silinecek ve yedekten geri yüklenecek. Bu işlem geri alınamaz. Devam etmek istiyor musunuz?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>İptal</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setImportConfirmOpen(false);
+                setImportPasswordOpen(true);
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              {backupLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-              <span className="text-xs">Yedekle</span>
-            </SidebarMenuButton>
-            <SidebarMenuButton
-              onClick={handleImport}
-              disabled={backupLoading}
-              className="flex-1"
-            >
-              <Upload className="w-4 h-4" />
-              <span className="text-xs">Geri Yükle</span>
-            </SidebarMenuButton>
-          </div>
-        )}
-        <SidebarMenuButton onClick={handleLogout} className="w-full text-destructive hover:text-destructive">
-          <LogOut className="w-5 h-5" />
-          <span>Çıkış Yap</span>
-        </SidebarMenuButton>
-      </SidebarFooter>
-    </Sidebar>
+              Devam Et
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Import password dialog */}
+      <PasswordDialog
+        open={importPasswordOpen}
+        onOpenChange={setImportPasswordOpen}
+        title="Yedek Şifresi"
+        description="Yedek dosyasının şifresini girin."
+        minLength={1}
+        onConfirm={handleImport}
+      />
+    </>
   );
 };

@@ -6,6 +6,10 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { Plus, Search, User, Phone, Trash2, Edit, Loader2, ChevronRight, MapPin, IdCard, Calendar, AlertCircle } from "lucide-react";
@@ -43,6 +47,7 @@ export const PatientsView = ({ onPatientSelect }: PatientsViewProps) => {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingPatient, setEditingPatient] = useState<Patient | null>(null);
   const [tcError, setTcError] = useState<string | null>(null);
+  const [deletePatientId, setDeletePatientId] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     full_name: "",
     phone: "",
@@ -87,6 +92,23 @@ export const PatientsView = ({ onPatientSelect }: PatientsViewProps) => {
       setTcError("Geçersiz TC kimlik numarası");
       return;
     }
+
+    // Validate email format if provided
+    if (formData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+      toast.error("Geçersiz e-posta adresi");
+      return;
+    }
+
+    // Validate phone format if provided (Turkish phone: digits, spaces, +, -, parens)
+    if (formData.phone && !/^[0-9\s\-+()]{7,15}$/.test(formData.phone)) {
+      toast.error("Geçersiz telefon numarası");
+      return;
+    }
+
+    if (formData.emergency_phone && !/^[0-9\s\-+()]{7,15}$/.test(formData.emergency_phone)) {
+      toast.error("Geçersiz acil durum telefon numarası");
+      return;
+    }
     
     try {
       const user = await auth.getUser();
@@ -123,10 +145,7 @@ export const PatientsView = ({ onPatientSelect }: PatientsViewProps) => {
     }
   };
 
-  const handleDelete = async (e: React.MouseEvent, id: string) => {
-    e.stopPropagation();
-    if (!confirm("Bu hastayı silmek istediğinizden emin misiniz?")) return;
-
+  const handleDelete = async (id: string) => {
     try {
       await db.deletePatient(id);
       toast.success("Hasta silindi");
@@ -495,7 +514,7 @@ export const PatientsView = ({ onPatientSelect }: PatientsViewProps) => {
                     variant="ghost"
                     size="sm"
                     className="text-destructive hover:text-destructive"
-                    onClick={(e) => handleDelete(e, patient.id)}
+                    onClick={(e) => { e.stopPropagation(); setDeletePatientId(patient.id); }}
                   >
                     <Trash2 className="w-4 h-4" />
                   </Button>
@@ -505,6 +524,24 @@ export const PatientsView = ({ onPatientSelect }: PatientsViewProps) => {
           ))}
         </div>
       )}
+
+      <AlertDialog open={!!deletePatientId} onOpenChange={(open) => !open && setDeletePatientId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Hasta Silme</AlertDialogTitle>
+            <AlertDialogDescription>Bu hastayı ve tüm randevularını silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>İptal</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => { if (deletePatientId) handleDelete(deletePatientId); setDeletePatientId(null); }}
+            >
+              Sil
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

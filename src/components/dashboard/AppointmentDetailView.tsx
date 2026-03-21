@@ -6,6 +6,10 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { ArrowLeft, Plus, Pill, Save, Calendar, Clock, Trash2, Loader2, FileText, CheckCircle, XCircle, Download, Bell } from "lucide-react";
@@ -56,6 +60,7 @@ export const AppointmentDetailView = ({ appointmentId, patientId, onBack }: Appo
   const [isNewAppointmentDialogOpen, setIsNewAppointmentDialogOpen] = useState(false);
   const [conflictWarning, setConflictWarning] = useState<string | null>(null);
   const [checkingConflict, setCheckingConflict] = useState(false);
+  const [deleteMedicationId, setDeleteMedicationId] = useState<string | null>(null);
   const [medicationForm, setMedicationForm] = useState({
     medication_name: "",
     dosage: "",
@@ -100,8 +105,8 @@ export const AppointmentDetailView = ({ appointmentId, patientId, onBack }: Appo
         } else {
           setConflictWarning(null);
         }
-      } catch (error) {
-        console.error("Conflict check error:", error);
+      } catch {
+        // Conflict check is non-critical
       } finally {
         setCheckingConflict(false);
       }
@@ -146,10 +151,15 @@ export const AppointmentDetailView = ({ appointmentId, patientId, onBack }: Appo
   const handleAddMedication = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    if (!medicationForm.medication_name.trim()) {
+      toast.error("İlaç adı boş olamaz");
+      return;
+    }
+
     try {
       await db.createMedication({
         appointment_id: appointmentId,
-        medication_name: medicationForm.medication_name,
+        medication_name: medicationForm.medication_name.trim(),
         dosage: medicationForm.dosage || null,
         instructions: medicationForm.instructions || null,
       });
@@ -164,13 +174,11 @@ export const AppointmentDetailView = ({ appointmentId, patientId, onBack }: Appo
   };
 
   const handleDeleteMedication = async (id: string) => {
-    if (!confirm("Bu ilacı silmek istediğinizden emin misiniz?")) return;
-
     try {
       await db.deleteMedication(id);
       toast.success("İlaç silindi");
       fetchData();
-    } catch (error: any) {
+    } catch {
       toast.error("İlaç silinemedi");
     }
   };
@@ -570,7 +578,7 @@ export const AppointmentDetailView = ({ appointmentId, patientId, onBack }: Appo
                     variant="ghost"
                     size="icon"
                     className="opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:text-destructive"
-                    onClick={() => handleDeleteMedication(med.id)}
+                    onClick={() => setDeleteMedicationId(med.id)}
                   >
                     <Trash2 className="w-4 h-4" />
                   </Button>
@@ -578,6 +586,24 @@ export const AppointmentDetailView = ({ appointmentId, patientId, onBack }: Appo
               ))}
             </div>
           )}
+
+          <AlertDialog open={!!deleteMedicationId} onOpenChange={(open) => !open && setDeleteMedicationId(null)}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>İlaç Silme</AlertDialogTitle>
+                <AlertDialogDescription>Bu ilacı silmek istediğinizden emin misiniz?</AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>İptal</AlertDialogCancel>
+                <AlertDialogAction
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  onClick={() => { if (deleteMedicationId) handleDeleteMedication(deleteMedicationId); setDeleteMedicationId(null); }}
+                >
+                  Sil
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </CardContent>
       </Card>
     </div>

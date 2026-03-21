@@ -3,9 +3,6 @@
  * Prevents leaking internal database schema information
  */
 export function mapDatabaseError(error: any): string {
-  // Log full error for debugging (will be visible in console only)
-  console.error("Database error:", error?.code, error?.message);
-
   // PostgreSQL error codes
   if (error?.code === "23503") {
     return "İlişkili kayıt bulunamadı";
@@ -23,11 +20,6 @@ export function mapDatabaseError(error: any): string {
     return "Geçersiz veri formatı";
   }
 
-  // RLS policy violations
-  if (error?.message?.includes("row-level security")) {
-    return "Bu işlem için yetkiniz yok";
-  }
-
   if (error?.message?.includes("violates foreign key")) {
     return "İlişkili kayıt bulunamadı";
   }
@@ -40,16 +32,6 @@ export function mapDatabaseError(error: any): string {
     return "Girilen değerler geçersiz";
   }
 
-  // Network errors
-  if (error?.message?.includes("Failed to fetch") || error?.message?.includes("NetworkError")) {
-    return "Bağlantı hatası. Lütfen internet bağlantınızı kontrol edin.";
-  }
-
-  // Authentication errors
-  if (error?.message?.includes("JWT") || error?.message?.includes("token")) {
-    return "Oturum süreniz dolmuş. Lütfen tekrar giriş yapın.";
-  }
-
   // Generic fallback - never expose raw error messages
   return "İşlem başarısız oldu. Lütfen tekrar deneyin.";
 }
@@ -59,8 +41,6 @@ export function mapDatabaseError(error: any): string {
  */
 export function handleError(error: any, fallbackMessage?: string): string {
   if (typeof error === "string") {
-    // Don't expose string errors that might contain sensitive info
-    console.error("Error:", error);
     return fallbackMessage || "Bir hata oluştu";
   }
 

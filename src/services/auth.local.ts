@@ -101,7 +101,6 @@ export class LocalAuthService implements AuthService {
       emit("SIGNED_IN", user);
       return { error: null };
     } catch (err) {
-      console.error("LocalAuth signIn error:", err);
       return { error: err instanceof Error ? err : new Error("Giriş hatası") };
     }
   }

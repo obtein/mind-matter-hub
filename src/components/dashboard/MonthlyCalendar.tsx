@@ -46,8 +46,8 @@ export const MonthlyCalendar = ({ selectedDate, onDateSelect }: MonthlyCalendarP
         counts[dateKey] = (counts[dateKey] || 0) + 1;
       });
       setAppointmentCounts(counts);
-    } catch (error) {
-      console.error("Aylık randevular yüklenemedi:", error);
+    } catch {
+      // Silent - calendar is non-critical
     }
   };
 

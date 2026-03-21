@@ -11,7 +11,6 @@ import { Bell, Check, Trash2, Calendar, AlertCircle, Info, CheckCircle } from "l
 import { format, formatDistanceToNow } from "date-fns";
 import { tr } from "date-fns/locale";
 import { toast } from "sonner";
-import { handleError } from "@/lib/errorHandler";
 
 interface Notification {
   id: string;
@@ -36,7 +35,6 @@ export const NotificationBell = () => {
     fetchNotifications();
     checkUpcomingAppointments();
 
-    // Set up real-time subscription
     const sub = db.subscribeToNotifications(() => fetchNotifications());
 
     return () => {
@@ -46,14 +44,11 @@ export const NotificationBell = () => {
 
   const fetchNotifications = async () => {
     try {
-      const { data, error } = await db.getNotifications(20);
-
-      if (error) throw error;
-
+      const data = await db.getNotifications(20);
       setNotifications(data || []);
       setUnreadCount(data?.filter((n) => !n.is_read).length || 0);
-    } catch (error) {
-      console.error("Error fetching notifications:", error);
+    } catch {
+      // Silent - notifications are non-critical
     } finally {
       setLoading(false);
     }
@@ -64,25 +59,23 @@ export const NotificationBell = () => {
       const user = await auth.getUser();
       if (!user) return;
 
-      // Get appointments in the next 24 hours
       const now = new Date();
       const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
 
-      const { data: appointments, error } = await db.getUpcomingAppointments(now.toISOString(), tomorrow.toISOString());
+      const appointments = await db.getUpcomingAppointments(now.toISOString(), tomorrow.toISOString());
 
-      if (error) throw error;
+      const appointmentIds = appointments?.map((a) => a.id) || [];
+      if (appointmentIds.length === 0) return;
 
-      // Check if we already have notifications for these appointments
-      const { data: existingNotifications } = await db.getNotificationsByAppointmentIds(appointments?.map((a) => a.id) || []);
+      const existingNotifications = await db.getNotificationsByAppointmentIds(appointmentIds);
 
       const existingAppointmentIds = new Set(
         existingNotifications?.map((n) => n.related_appointment_id) || []
       );
 
-      // Create notifications for upcoming appointments that don't have one
       for (const apt of appointments || []) {
         if (!existingAppointmentIds.has(apt.id)) {
-          const patientName = (apt.patients as any)?.full_name || "Hasta";
+          const patientName = apt.patients?.full_name || "Hasta";
           const aptTime = format(new Date(apt.appointment_date), "HH:mm", { locale: tr });
           const aptDate = format(new Date(apt.appointment_date), "d MMMM", { locale: tr });
 
@@ -97,41 +90,35 @@ export const NotificationBell = () => {
       }
 
       fetchNotifications();
-    } catch (error) {
-      console.error("Error checking upcoming appointments:", error);
+    } catch {
+      // Silent - notification creation is non-critical
     }
   };
 
   const markAsRead = async (id: string) => {
     try {
-      const { error } = await db.markNotificationRead(id);
-
-      if (error) throw error;
+      await db.markNotificationRead(id);
       fetchNotifications();
-    } catch (error) {
-      console.error("Error marking notification as read:", error);
+    } catch {
+      toast.error("İşlem başarısız");
     }
   };
 
   const markAllAsRead = async () => {
     try {
-      const { error } = await db.markAllNotificationsRead();
-
-      if (error) throw error;
+      await db.markAllNotificationsRead();
       toast.success("Tüm bildirimler okundu olarak işaretlendi");
       fetchNotifications();
-    } catch (error) {
+    } catch {
       toast.error("İşlem başarısız");
     }
   };
 
   const deleteNotification = async (id: string) => {
     try {
-      const { error } = await db.deleteNotification(id);
-
-      if (error) throw error;
+      await db.deleteNotification(id);
       fetchNotifications();
-    } catch (error) {
+    } catch {
       toast.error("Bildirim silinemedi");
     }
   };

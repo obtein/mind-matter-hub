@@ -366,7 +366,7 @@ export class PGliteDbService implements DbService {
 
   subscribeToNotifications(callback: () => void): { unsubscribe: () => void } {
     // PGlite has no realtime — use polling
-    const interval = setInterval(callback, 30000);
+    const interval = setInterval(callback, 10000);
     return { unsubscribe: () => clearInterval(interval) };
   }
 

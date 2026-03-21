@@ -1,7 +1,6 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import type { AuthService } from "./auth";
 import type { DbService } from "./db";
-import { IS_TAURI } from "@/lib/platform";
 
 interface Services {
   auth: AuthService;
@@ -31,23 +30,13 @@ export function ServiceProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     async function init() {
       try {
-        if (IS_TAURI) {
-          const { LocalAuthService } = await import("./auth.local");
-          const { PGliteDbService } = await import("./db.pglite");
-          setServices({
-            auth: new LocalAuthService(),
-            db: new PGliteDbService(),
-          });
-        } else {
-          const { SupabaseAuthService } = await import("./auth.supabase");
-          const { SupabaseDbService } = await import("./db.supabase");
-          setServices({
-            auth: new SupabaseAuthService(),
-            db: new SupabaseDbService(),
-          });
-        }
+        const { LocalAuthService } = await import("./auth.local");
+        const { PGliteDbService } = await import("./db.pglite");
+        setServices({
+          auth: new LocalAuthService(),
+          db: new PGliteDbService(),
+        });
       } catch (err) {
-        console.error("Service init error:", err);
         setError(err instanceof Error ? err.message : "Servisler başlatılamadı");
       }
     }

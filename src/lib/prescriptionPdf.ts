@@ -33,8 +33,8 @@ export const generatePrescriptionPdf = async (data: PrescriptionData) => {
     doc.addFileToVFS("Roboto-Regular.ttf", fontBase64);
     doc.addFont("Roboto-Regular.ttf", "Roboto", "normal");
     doc.setFont("Roboto");
-  } catch (error) {
-    console.warn("Could not load custom font, using default");
+  } catch {
+    // Fallback to default font if custom font fails to load
   }
   
   // Header

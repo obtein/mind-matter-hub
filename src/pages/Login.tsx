@@ -23,17 +23,13 @@ const Login = () => {
       const { error } = await auth.signIn(loginData.email, loginData.password);
 
       if (error) {
-        // Generic error message to prevent user enumeration attacks
-        console.error("Login error:", error.message);
         toast.error("Giriş bilgileri hatalı. Lütfen e-posta ve şifrenizi kontrol edin.");
         return;
       }
 
       toast.success("Giriş başarılı!");
       navigate("/dashboard");
-    } catch (error: any) {
-      // Never expose internal error details
-      console.error("Login error:", error);
+    } catch {
       toast.error("Giriş yapılamadı. Lütfen tekrar deneyin.");
     } finally {
       setIsLoading(false);

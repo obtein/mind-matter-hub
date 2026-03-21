@@ -6,8 +6,8 @@
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:8080",
-    "beforeDevCommand": "bun run dev",
-    "beforeBuildCommand": "bun run build"
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build"
   },
   "app": {
     "windows": [
@@ -28,12 +28,11 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["dmg", "app", "msi"],
+    "targets": ["msi"],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
       "icons/128x128@2x.png",
-      "icons/icon.icns",
       "icons/icon.ico"
     ],
     "createUpdaterArtifacts": true
@@ -43,7 +42,7 @@
       "endpoints": [
         "https://github.com/obtein/mind-matter-hub/releases/latest/download/latest.json"
       ],
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDM0MjdDREJGRThDNjZGMzcKUldRM2I4Ym92ODBuTkR2UjNISGJ2dHZqRnpnYnl1MFBEcFliaWtIUEdScm9wT2tRV0x2eHQxL3MK"
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDc2MDMxODY4ODk4MkYyOUQKUldTZDhvS0phQmdEZHZCWUx2bmtiZUdWOHRUMlhhcFFEWlRPRDFZdWhZS0YvL3BCaXBHM0RuR3kK"
     }
   }
 }
