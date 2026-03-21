@@ -108,6 +108,37 @@ export const DashboardSidebar = ({ viewState, setViewState, user }: DashboardSid
     }
   };
 
+  const handleWebBackup = async () => {
+    setWebBackupLoading(true);
+    try {
+      const [patients, appointments, medications, notifications] = await Promise.all([
+        db.getPatients(),
+        db.getAppointmentsForStats(),
+        db.getAllMedicationsWithDetails(),
+        db.getNotifications(1000),
+      ]);
+
+      const backupData = {
+        version: "1.0",
+        exportDate: new Date().toISOString(),
+        tables: { patients, appointments, medications, notifications },
+      };
+
+      const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `psitrak_yedek_${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success("Yedek dosyası indirildi");
+    } catch (error: any) {
+      toast.error("Yedek oluşturulamadı: " + (error.message || "Bilinmeyen hata"));
+    } finally {
+      setWebBackupLoading(false);
+    }
+  };
+
   const isActive = (type: string) => {
     if (type === "patients") {
       return viewState.type === "patients" || viewState.type === "patient-detail" || viewState.type === "appointment-detail";
