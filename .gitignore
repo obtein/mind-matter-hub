@@ -33,3 +33,5 @@ src-tauri/gen
 *.sw?
 src-tauri/keys/
 migration-data/
+bun.lock
+bun.lockb
