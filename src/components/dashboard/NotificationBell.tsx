@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { useAuth, useDb } from "@/services/ServiceContext";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
@@ -25,6 +25,8 @@ interface Notification {
 }
 
 export const NotificationBell = () => {
+  const auth = useAuth();
+  const db = useDb();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [isOpen, setIsOpen] = useState(false);
@@ -35,33 +37,16 @@ export const NotificationBell = () => {
     checkUpcomingAppointments();
 
     // Set up real-time subscription
-    const channel = supabase
-      .channel('notifications')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'notifications',
-        },
-        () => {
-          fetchNotifications();
-        }
-      )
-      .subscribe();
+    const sub = db.subscribeToNotifications(() => fetchNotifications());
 
     return () => {
-      supabase.removeChannel(channel);
+      sub.unsubscribe();
     };
   }, []);
 
   const fetchNotifications = async () => {
     try {
-      const { data, error } = await supabase
-        .from("notifications")
-        .select("*")
-        .order("created_at", { ascending: false })
-        .limit(20);
+      const { data, error } = await db.getNotifications(20);
 
       if (error) throw error;
 
@@ -76,32 +61,19 @@ export const NotificationBell = () => {
 
   const checkUpcomingAppointments = async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await auth.getUser();
       if (!user) return;
 
       // Get appointments in the next 24 hours
       const now = new Date();
       const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
 
-      const { data: appointments, error } = await supabase
-        .from("appointments")
-        .select(`
-          id,
-          appointment_date,
-          patients:patient_id (full_name)
-        `)
-        .eq("status", "scheduled")
-        .gte("appointment_date", now.toISOString())
-        .lte("appointment_date", tomorrow.toISOString())
-        .order("appointment_date", { ascending: true });
+      const { data: appointments, error } = await db.getUpcomingAppointments(now.toISOString(), tomorrow.toISOString());
 
       if (error) throw error;
 
       // Check if we already have notifications for these appointments
-      const { data: existingNotifications } = await supabase
-        .from("notifications")
-        .select("related_appointment_id")
-        .in("related_appointment_id", appointments?.map((a) => a.id) || []);
+      const { data: existingNotifications } = await db.getNotificationsByAppointmentIds(appointments?.map((a) => a.id) || []);
 
       const existingAppointmentIds = new Set(
         existingNotifications?.map((n) => n.related_appointment_id) || []
@@ -114,7 +86,7 @@ export const NotificationBell = () => {
           const aptTime = format(new Date(apt.appointment_date), "HH:mm", { locale: tr });
           const aptDate = format(new Date(apt.appointment_date), "d MMMM", { locale: tr });
 
-          await supabase.from("notifications").insert({
+          await db.createNotification({
             user_id: user.id,
             title: "Yaklaşan Randevu",
             message: `${patientName} - ${aptDate} saat ${aptTime}`,
@@ -132,10 +104,7 @@ export const NotificationBell = () => {
 
   const markAsRead = async (id: string) => {
     try {
-      const { error } = await supabase
-        .from("notifications")
-        .update({ is_read: true })
-        .eq("id", id);
+      const { error } = await db.markNotificationRead(id);
 
       if (error) throw error;
       fetchNotifications();
@@ -146,10 +115,7 @@ export const NotificationBell = () => {
 
   const markAllAsRead = async () => {
     try {
-      const { error } = await supabase
-        .from("notifications")
-        .update({ is_read: true })
-        .eq("is_read", false);
+      const { error } = await db.markAllNotificationsRead();
 
       if (error) throw error;
       toast.success("Tüm bildirimler okundu olarak işaretlendi");
@@ -161,10 +127,7 @@ export const NotificationBell = () => {
 
   const deleteNotification = async (id: string) => {
     try {
-      const { error } = await supabase
-        .from("notifications")
-        .delete()
-        .eq("id", id);
+      const { error } = await db.deleteNotification(id);
 
       if (error) throw error;
       fetchNotifications();

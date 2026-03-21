@@ -1,4 +1,4 @@
-import { supabase } from "@/integrations/supabase/client";
+import type { DbService } from "@/services/db";
 
 interface ConflictCheckResult {
   hasConflict: boolean;
@@ -8,7 +8,8 @@ interface ConflictCheckResult {
 export const checkAppointmentConflict = async (
   appointmentDate: Date,
   durationMinutes: number,
-  excludeAppointmentId?: string
+  excludeAppointmentId: string | undefined,
+  db: DbService
 ): Promise<ConflictCheckResult> => {
   const startTime = appointmentDate.getTime();
   const endTime = startTime + durationMinutes * 60 * 1000;
@@ -20,22 +21,11 @@ export const checkAppointmentConflict = async (
   const dayEnd = new Date(appointmentDate);
   dayEnd.setHours(23, 59, 59, 999);
 
-  let query = supabase
-    .from("appointments")
-    .select("id, appointment_date, duration_minutes, patients(full_name)")
-    .gte("appointment_date", dayStart.toISOString())
-    .lte("appointment_date", dayEnd.toISOString())
-    .neq("status", "cancelled");
-
-  if (excludeAppointmentId) {
-    query = query.neq("id", excludeAppointmentId);
-  }
-
-  const { data: appointments, error } = await query;
-
-  if (error) {
-    throw error;
-  }
+  const appointments = await db.getAppointmentsForConflictCheck(
+    dayStart.toISOString(),
+    dayEnd.toISOString(),
+    excludeAppointmentId
+  );
 
   // Check for overlapping appointments
   for (const apt of appointments || []) {

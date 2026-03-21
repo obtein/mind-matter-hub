@@ -1,8 +1,10 @@
-import { Users, Calendar, LogOut, BarChart3, Pill } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
+import { useState } from "react";
+import { Users, Calendar, LogOut, BarChart3, Pill, Download, Upload, Loader2 } from "lucide-react";
+import { useAuth } from "@/services/ServiceContext";
 import { toast } from "sonner";
 import type { ViewState } from "@/pages/Dashboard";
-import type { User } from "@supabase/supabase-js";
+import type { AppUser } from "@/services/auth";
+import { IS_TAURI } from "@/lib/platform";
 import psiTrakLogo from "/favicon.png";
 import {
   Sidebar,
@@ -20,7 +22,7 @@ import {
 interface DashboardSidebarProps {
   viewState: ViewState;
   setViewState: (state: ViewState) => void;
-  user: User;
+  user: AppUser;
 }
 
 const menuItems = [
@@ -31,12 +33,50 @@ const menuItems = [
 ];
 
 export const DashboardSidebar = ({ viewState, setViewState, user }: DashboardSidebarProps) => {
+  const auth = useAuth();
+  const [backupLoading, setBackupLoading] = useState(false);
+
   const handleLogout = async () => {
     try {
-      await supabase.auth.signOut();
+      await auth.signOut();
       toast.success("Çıkış yapıldı");
     } catch (error) {
       toast.error("Çıkış yapılamadı");
+    }
+  };
+
+  const handleExport = async () => {
+    const password = prompt("Yedek dosyası için şifre belirleyin:");
+    if (!password || password.length < 4) {
+      if (password !== null) toast.error("Şifre en az 4 karakter olmalıdır");
+      return;
+    }
+    setBackupLoading(true);
+    try {
+      const { downloadBackup } = await import("@/services/backup");
+      await downloadBackup(password);
+      toast.success("Yedek başarıyla oluşturuldu");
+    } catch (error: any) {
+      toast.error(error.message || "Yedek oluşturulamadı");
+    } finally {
+      setBackupLoading(false);
+    }
+  };
+
+  const handleImport = async () => {
+    if (!confirm("Mevcut tüm veriler silinecek ve yedekten geri yüklenecek. Devam etmek istiyor musunuz?")) return;
+    const password = prompt("Yedek dosyasının şifresini girin:");
+    if (!password) return;
+    setBackupLoading(true);
+    try {
+      const { uploadAndRestoreBackup } = await import("@/services/backup");
+      await uploadAndRestoreBackup(password);
+      toast.success("Veriler başarıyla geri yüklendi. Sayfa yenileniyor...");
+      setTimeout(() => window.location.reload(), 1500);
+    } catch (error: any) {
+      toast.error(error.message || "Geri yükleme başarısız");
+    } finally {
+      setBackupLoading(false);
     }
   };
 
@@ -95,6 +135,26 @@ export const DashboardSidebar = ({ viewState, setViewState, user }: DashboardSid
             <p className="text-xs text-sidebar-foreground/60 truncate">{user.email}</p>
           </div>
         </div>
+        {IS_TAURI && (
+          <div className="flex gap-2 mb-3">
+            <SidebarMenuButton
+              onClick={handleExport}
+              disabled={backupLoading}
+              className="flex-1"
+            >
+              {backupLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+              <span className="text-xs">Yedekle</span>
+            </SidebarMenuButton>
+            <SidebarMenuButton
+              onClick={handleImport}
+              disabled={backupLoading}
+              className="flex-1"
+            >
+              <Upload className="w-4 h-4" />
+              <span className="text-xs">Geri Yükle</span>
+            </SidebarMenuButton>
+          </div>
+        )}
         <SidebarMenuButton onClick={handleLogout} className="w-full text-destructive hover:text-destructive">
           <LogOut className="w-5 h-5" />
           <span>Çıkış Yap</span>

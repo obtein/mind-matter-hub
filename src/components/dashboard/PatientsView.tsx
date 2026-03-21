@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { useAuth, useDb } from "@/services/ServiceContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -34,6 +34,8 @@ interface PatientsViewProps {
 }
 
 export const PatientsView = ({ onPatientSelect }: PatientsViewProps) => {
+  const auth = useAuth();
+  const db = useDb();
   const [patients, setPatients] = useState<Patient[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
@@ -59,29 +61,13 @@ export const PatientsView = ({ onPatientSelect }: PatientsViewProps) => {
 
   const fetchPatients = async () => {
     try {
-      // Fetch patients with their last appointment
-      const { data: patientsData, error: patientsError } = await supabase
-        .from("patients")
-        .select("*")
-        .order("created_at", { ascending: false });
-
-      if (patientsError) throw patientsError;
+      const patientsData = await db.getPatients();
 
       // Fetch last appointment for each patient
       const patientsWithAppointments = await Promise.all(
         (patientsData || []).map(async (patient) => {
-          const { data: appointmentData } = await supabase
-            .from("appointments")
-            .select("appointment_date")
-            .eq("patient_id", patient.id)
-            .order("appointment_date", { ascending: false })
-            .limit(1)
-            .maybeSingle();
-
-          return {
-            ...patient,
-            last_appointment: appointmentData?.appointment_date || null,
-          };
+          const lastDate = await db.getLastAppointmentDate(patient.id);
+          return { ...patient, last_appointment: lastDate };
         })
       );
 
@@ -103,7 +89,7 @@ export const PatientsView = ({ onPatientSelect }: PatientsViewProps) => {
     }
     
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await auth.getUser();
       if (!user) throw new Error("Kullanıcı bulunamadı");
 
       const patientData = {
@@ -119,20 +105,13 @@ export const PatientsView = ({ onPatientSelect }: PatientsViewProps) => {
       };
 
       if (editingPatient) {
-        const { error } = await supabase
-          .from("patients")
-          .update(patientData)
-          .eq("id", editingPatient.id);
-
-        if (error) throw error;
+        await db.updatePatient(editingPatient.id, patientData);
         toast.success("Hasta güncellendi");
       } else {
-        const { error } = await supabase.from("patients").insert({
+        await db.createPatient({
           ...patientData,
           doctor_id: user.id,
         });
-
-        if (error) throw error;
         toast.success("Hasta eklendi");
       }
 
@@ -149,8 +128,7 @@ export const PatientsView = ({ onPatientSelect }: PatientsViewProps) => {
     if (!confirm("Bu hastayı silmek istediğinizden emin misiniz?")) return;
 
     try {
-      const { error } = await supabase.from("patients").delete().eq("id", id);
-      if (error) throw error;
+      await db.deletePatient(id);
       toast.success("Hasta silindi");
       fetchPatients();
     } catch (error: any) {

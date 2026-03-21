@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/services/ServiceContext";
 import { DashboardSidebar } from "@/components/dashboard/DashboardSidebar";
 import { PatientsView } from "@/components/dashboard/PatientsView";
 import { DailyScheduleView } from "@/components/dashboard/DailyScheduleView";
@@ -9,8 +9,9 @@ import { AppointmentDetailView } from "@/components/dashboard/AppointmentDetailV
 import { StatisticsView } from "@/components/dashboard/StatisticsView";
 import { MedicationsReportView } from "@/components/dashboard/MedicationsReportView";
 import { NotificationBell } from "@/components/dashboard/NotificationBell";
+import { UpdateChecker } from "@/components/desktop/UpdateChecker";
 import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui/sidebar";
-import type { User } from "@supabase/supabase-js";
+import type { AppUser } from "@/services/auth";
 
 export type ViewType = "schedule" | "patients" | "patient-detail" | "appointment-detail" | "statistics" | "medications";
 
@@ -22,32 +23,31 @@ export interface ViewState {
 
 const Dashboard = () => {
   const navigate = useNavigate();
-  const [user, setUser] = useState<User | null>(null);
+  const auth = useAuth();
+  const [user, setUser] = useState<AppUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [viewState, setViewState] = useState<ViewState>({ type: "schedule" });
 
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        if (event === "SIGNED_OUT" || !session) {
-          navigate("/");
-        } else {
-          setUser(session.user);
-        }
-        setLoading(false);
-      }
-    );
-
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!session) {
+    const sub = auth.onAuthStateChange((event, user) => {
+      if (event === "SIGNED_OUT" || !user) {
         navigate("/");
       } else {
-        setUser(session.user);
+        setUser(user);
       }
       setLoading(false);
     });
 
-    return () => subscription.unsubscribe();
+    auth.getSession().then(({ user }) => {
+      if (!user) {
+        navigate("/");
+      } else {
+        setUser(user);
+      }
+      setLoading(false);
+    });
+
+    return () => sub.unsubscribe();
   }, [navigate]);
 
   const navigateTo = (newState: ViewState) => {
@@ -66,6 +66,7 @@ const Dashboard = () => {
 
   return (
     <SidebarProvider>
+      <UpdateChecker />
       <div className="min-h-screen flex w-full bg-background">
         <DashboardSidebar 
           viewState={viewState}

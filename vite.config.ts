@@ -5,9 +5,19 @@ import { componentTagger } from "lovable-tagger";
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
+  // Prevent Vite from obscuring Rust errors
+  clearScreen: false,
   server: {
     host: "::",
     port: 8080,
+    // Tauri expects a fixed port
+    strictPort: true,
+  },
+  // Allow Tauri env variables
+  envPrefix: ["VITE_", "TAURI_"],
+  // PGlite needs its WASM/data files served without transformation
+  optimizeDeps: {
+    exclude: ["@electric-sql/pglite"],
   },
   plugins: [react(), mode === "development" && componentTagger()].filter(Boolean),
   resolve: {

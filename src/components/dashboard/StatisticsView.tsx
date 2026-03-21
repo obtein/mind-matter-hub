@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { useDb } from "@/services/ServiceContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
 import { Users, Calendar, TrendingUp, UserCheck, Loader2 } from "lucide-react";
@@ -45,6 +45,7 @@ const AGE_COLORS: Record<string, string> = {
 };
 
 export const StatisticsView = () => {
+  const db = useDb();
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -55,18 +56,10 @@ export const StatisticsView = () => {
   const fetchStats = async () => {
     try {
       // Fetch patients
-      const { data: patients, error: patientsError } = await supabase
-        .from("patients")
-        .select("id, gender, date_of_birth");
-
-      if (patientsError) throw patientsError;
+      const patients = await db.getPatientsForStats();
 
       // Fetch appointments
-      const { data: appointments, error: appointmentsError } = await supabase
-        .from("appointments")
-        .select("id, appointment_date, status");
-
-      if (appointmentsError) throw appointmentsError;
+      const appointments = await db.getAppointmentsForStats();
 
       // Calculate gender distribution
       const genderCounts: Record<string, number> = {};

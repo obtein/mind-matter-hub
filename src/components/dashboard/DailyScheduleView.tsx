@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { useDb } from "@/services/ServiceContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "sonner";
@@ -26,6 +26,7 @@ interface DailyScheduleViewProps {
 const HOURS = Array.from({ length: 13 }, (_, i) => i + 8); // 08:00 - 20:00
 
 export const DailyScheduleView = ({ onAppointmentSelect }: DailyScheduleViewProps) => {
+  const db = useDb();
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
@@ -43,14 +44,7 @@ export const DailyScheduleView = ({ onAppointmentSelect }: DailyScheduleViewProp
       const endOfDay = new Date(selectedDate);
       endOfDay.setHours(23, 59, 59, 999);
 
-      const { data, error } = await supabase
-        .from("appointments")
-        .select("id, patient_id, appointment_date, duration_minutes, notes, status, patients(full_name)")
-        .gte("appointment_date", startOfDay.toISOString())
-        .lte("appointment_date", endOfDay.toISOString())
-        .order("appointment_date", { ascending: true });
-
-      if (error) throw error;
+      const data = await db.getAppointmentsByDateRange(startOfDay.toISOString(), endOfDay.toISOString());
       setAppointments(data || []);
     } catch (error: unknown) {
       toast.error(handleError(error, "Randevular yüklenemedi"));

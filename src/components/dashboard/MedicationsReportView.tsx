@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { useDb } from "@/services/ServiceContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
@@ -30,6 +30,7 @@ interface MedicationSummary {
 }
 
 export const MedicationsReportView = () => {
+  const db = useDb();
   const [medications, setMedications] = useState<MedicationRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
@@ -40,40 +41,8 @@ export const MedicationsReportView = () => {
 
   const fetchMedications = async () => {
     try {
-      const { data, error } = await supabase
-        .from("session_medications")
-        .select(`
-          id,
-          medication_name,
-          dosage,
-          instructions,
-          created_at,
-          appointments:appointment_id (
-            appointment_date,
-            patients:patient_id (
-              id,
-              full_name
-            )
-          )
-        `)
-        .order("created_at", { ascending: false });
-
-      if (error) throw error;
-
-      // Transform the data to match our interface
-      const transformedData: MedicationRecord[] = (data || []).map((med: any) => ({
-        id: med.id,
-        medication_name: med.medication_name,
-        dosage: med.dosage,
-        instructions: med.instructions,
-        created_at: med.created_at,
-        appointment: med.appointments ? {
-          appointment_date: med.appointments.appointment_date,
-          patient: med.appointments.patients
-        } : null
-      }));
-
-      setMedications(transformedData);
+      const data = await db.getAllMedicationsWithDetails();
+      setMedications(data);
     } catch (error: unknown) {
       toast.error(handleError(error, "İlaç verileri yüklenemedi"));
     } finally {

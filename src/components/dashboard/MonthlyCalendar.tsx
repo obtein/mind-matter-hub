@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { useDb } from "@/services/ServiceContext";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { 
@@ -26,6 +26,7 @@ interface DayAppointmentCount {
 }
 
 export const MonthlyCalendar = ({ selectedDate, onDateSelect }: MonthlyCalendarProps) => {
+  const db = useDb();
   const [currentMonth, setCurrentMonth] = useState<Date>(startOfMonth(selectedDate));
   const [appointmentCounts, setAppointmentCounts] = useState<DayAppointmentCount>({});
 
@@ -38,20 +39,12 @@ export const MonthlyCalendar = ({ selectedDate, onDateSelect }: MonthlyCalendarP
       const monthStart = startOfMonth(currentMonth);
       const monthEnd = endOfMonth(currentMonth);
 
-      const { data, error } = await supabase
-        .from("appointments")
-        .select("appointment_date")
-        .gte("appointment_date", monthStart.toISOString())
-        .lte("appointment_date", monthEnd.toISOString());
-
-      if (error) throw error;
-
+      const dates = await db.getMonthlyAppointmentDates(monthStart.toISOString(), monthEnd.toISOString());
       const counts: DayAppointmentCount = {};
-      (data || []).forEach((apt) => {
-        const dateKey = format(new Date(apt.appointment_date), "yyyy-MM-dd");
+      dates.forEach((dateStr) => {
+        const dateKey = format(new Date(dateStr), "yyyy-MM-dd");
         counts[dateKey] = (counts[dateKey] || 0) + 1;
       });
-
       setAppointmentCounts(counts);
     } catch (error) {
       console.error("Aylık randevular yüklenemedi:", error);

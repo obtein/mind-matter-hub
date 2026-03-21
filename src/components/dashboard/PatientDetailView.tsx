@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { useAuth, useDb } from "@/services/ServiceContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -51,6 +51,8 @@ interface PatientDetailViewProps {
 }
 
 export const PatientDetailView = ({ patientId, onBack, onAppointmentSelect }: PatientDetailViewProps) => {
+  const auth = useAuth();
+  const db = useDb();
   const [patient, setPatient] = useState<Patient | null>(null);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [medications, setMedications] = useState<MedicationHistory[]>([]);
@@ -89,7 +91,9 @@ export const PatientDetailView = ({ patientId, onBack, onAppointmentSelect }: Pa
 
         const { hasConflict, conflictingPatient } = await checkAppointmentConflict(
           appointmentDateTime,
-          durationMinutes
+          durationMinutes,
+          undefined,
+          db
         );
 
         if (hasConflict) {
@@ -124,50 +128,18 @@ export const PatientDetailView = ({ patientId, onBack, onAppointmentSelect }: Pa
 
   const fetchData = async () => {
     try {
-      const [patientRes, appointmentsRes] = await Promise.all([
-        supabase
-          .from("patients")
-          .select("*")
-          .eq("id", patientId)
-          .maybeSingle(),
-        supabase
-          .from("appointments")
-          .select("*")
-          .eq("patient_id", patientId)
-          .order("appointment_date", { ascending: false }),
+      const [patientData, appointmentsData] = await Promise.all([
+        db.getPatient(patientId),
+        db.getAppointmentsByPatient(patientId),
       ]);
-
-      if (patientRes.error) throw patientRes.error;
-      if (appointmentsRes.error) throw appointmentsRes.error;
-
-      setPatient(patientRes.data);
-      setAppointments(appointmentsRes.data || []);
+      setPatient(patientData);
+      setAppointments(appointmentsData || []);
 
       // Fetch medications for all appointments of this patient
-      if (appointmentsRes.data && appointmentsRes.data.length > 0) {
-        const appointmentIds = appointmentsRes.data.map((a) => a.id);
-        const { data: medsData, error: medsError } = await supabase
-          .from("session_medications")
-          .select(`
-            id,
-            medication_name,
-            dosage,
-            instructions,
-            appointments:appointment_id (appointment_date)
-          `)
-          .in("appointment_id", appointmentIds)
-          .order("created_at", { ascending: false });
-
-        if (!medsError && medsData) {
-          const transformedMeds: MedicationHistory[] = medsData.map((med: any) => ({
-            id: med.id,
-            medication_name: med.medication_name,
-            dosage: med.dosage,
-            instructions: med.instructions,
-            appointment_date: med.appointments?.appointment_date || "",
-          }));
-          setMedications(transformedMeds);
-        }
+      if (appointmentsData && appointmentsData.length > 0) {
+        const appointmentIds = appointmentsData.map((a) => a.id);
+        const medsData = await db.getMedicationsByAppointmentIds(appointmentIds);
+        setMedications(medsData);
       }
     } catch (error: any) {
       toast.error("Veriler yüklenemedi");
@@ -180,7 +152,7 @@ export const PatientDetailView = ({ patientId, onBack, onAppointmentSelect }: Pa
     e.preventDefault();
 
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await auth.getUser();
       if (!user) throw new Error("Kullanıcı bulunamadı");
 
       const appointmentDateTime = new Date(
@@ -191,7 +163,9 @@ export const PatientDetailView = ({ patientId, onBack, onAppointmentSelect }: Pa
       // Check for conflicts
       const { hasConflict, conflictingPatient } = await checkAppointmentConflict(
         appointmentDateTime,
-        durationMinutes
+        durationMinutes,
+        undefined,
+        db
       );
 
       if (hasConflict) {
@@ -199,15 +173,13 @@ export const PatientDetailView = ({ patientId, onBack, onAppointmentSelect }: Pa
         return;
       }
 
-      const { data: appointmentData, error } = await supabase.from("appointments").insert({
+      const appointmentData = await db.createAppointment({
         patient_id: patientId,
         doctor_id: user.id,
         appointment_date: appointmentDateTime.toISOString(),
         duration_minutes: durationMinutes,
         notes: formData.notes || null,
-      }).select().single();
-
-      if (error) throw error;
+      });
 
       // Create reminder if selected
       if (formData.reminder_time !== "none" && appointmentData) {
@@ -221,7 +193,7 @@ export const PatientDetailView = ({ patientId, onBack, onAppointmentSelect }: Pa
         const offset = reminderOffsets[formData.reminder_time] || 24 * 60 * 60 * 1000;
         const reminderTime = new Date(appointmentDateTime.getTime() - offset);
 
-        await supabase.from("appointment_reminders").insert({
+        await db.createReminder({
           appointment_id: appointmentData.id,
           reminder_type: "in_app",
           reminder_time: reminderTime.toISOString(),
@@ -248,8 +220,7 @@ export const PatientDetailView = ({ patientId, onBack, onAppointmentSelect }: Pa
     if (!confirm("Bu randevuyu silmek istediğinizden emin misiniz?")) return;
 
     try {
-      const { error } = await supabase.from("appointments").delete().eq("id", appointmentId);
-      if (error) throw error;
+      await db.deleteAppointment(appointmentId);
       toast.success("Randevu silindi");
       fetchData();
     } catch (error: any) {

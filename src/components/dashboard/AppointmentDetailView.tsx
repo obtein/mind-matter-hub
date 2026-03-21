@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { useAuth, useDb } from "@/services/ServiceContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -43,6 +43,8 @@ interface AppointmentDetailViewProps {
 }
 
 export const AppointmentDetailView = ({ appointmentId, patientId, onBack }: AppointmentDetailViewProps) => {
+  const auth = useAuth();
+  const db = useDb();
   const [appointment, setAppointment] = useState<Appointment | null>(null);
   const [patient, setPatient] = useState<Patient | null>(null);
   const [medications, setMedications] = useState<Medication[]>([]);
@@ -88,7 +90,9 @@ export const AppointmentDetailView = ({ appointmentId, patientId, onBack }: Appo
 
         const { hasConflict, conflictingPatient } = await checkAppointmentConflict(
           appointmentDateTime,
-          durationMinutes
+          durationMinutes,
+          undefined,
+          db
         );
 
         if (hasConflict) {
@@ -109,21 +113,17 @@ export const AppointmentDetailView = ({ appointmentId, patientId, onBack }: Appo
 
   const fetchData = async () => {
     try {
-      const [appointmentRes, patientRes, medicationsRes] = await Promise.all([
-        supabase.from("appointments").select("*").eq("id", appointmentId).maybeSingle(),
-        supabase.from("patients").select("id, full_name").eq("id", patientId).maybeSingle(),
-        supabase.from("session_medications").select("*").eq("appointment_id", appointmentId).order("created_at"),
+      const [appointmentData, patientData, medicationsData] = await Promise.all([
+        db.getAppointment(appointmentId),
+        db.getPatientName(patientId),
+        db.getMedicationsByAppointment(appointmentId),
       ]);
 
-      if (appointmentRes.error) throw appointmentRes.error;
-      if (patientRes.error) throw patientRes.error;
-      if (medicationsRes.error) throw medicationsRes.error;
-
-      setAppointment(appointmentRes.data);
-      setPatient(patientRes.data);
-      setMedications(medicationsRes.data || []);
-      setNotes(appointmentRes.data?.notes || "");
-      setStatus(appointmentRes.data?.status || "scheduled");
+      setAppointment(appointmentData);
+      setPatient(patientData);
+      setMedications(medicationsData || []);
+      setNotes(appointmentData?.notes || "");
+      setStatus(appointmentData?.status || "scheduled");
     } catch (error: any) {
       toast.error("Veriler yüklenemedi");
     } finally {
@@ -134,12 +134,7 @@ export const AppointmentDetailView = ({ appointmentId, patientId, onBack }: Appo
   const handleSave = async () => {
     setSaving(true);
     try {
-      const { error } = await supabase
-        .from("appointments")
-        .update({ notes, status })
-        .eq("id", appointmentId);
-
-      if (error) throw error;
+      await db.updateAppointment(appointmentId, { notes, status });
       toast.success("Kaydedildi");
     } catch (error: any) {
       toast.error("Kaydedilemedi");
@@ -152,14 +147,12 @@ export const AppointmentDetailView = ({ appointmentId, patientId, onBack }: Appo
     e.preventDefault();
 
     try {
-      const { error } = await supabase.from("session_medications").insert({
+      await db.createMedication({
         appointment_id: appointmentId,
         medication_name: medicationForm.medication_name,
         dosage: medicationForm.dosage || null,
         instructions: medicationForm.instructions || null,
       });
-
-      if (error) throw error;
 
       toast.success("İlaç eklendi");
       setIsMedicationDialogOpen(false);
@@ -174,8 +167,7 @@ export const AppointmentDetailView = ({ appointmentId, patientId, onBack }: Appo
     if (!confirm("Bu ilacı silmek istediğinizden emin misiniz?")) return;
 
     try {
-      const { error } = await supabase.from("session_medications").delete().eq("id", id);
-      if (error) throw error;
+      await db.deleteMedication(id);
       toast.success("İlaç silindi");
       fetchData();
     } catch (error: any) {
@@ -187,7 +179,7 @@ export const AppointmentDetailView = ({ appointmentId, patientId, onBack }: Appo
     e.preventDefault();
 
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await auth.getUser();
       if (!user) throw new Error("Kullanıcı bulunamadı");
 
       const appointmentDateTime = new Date(
@@ -198,7 +190,9 @@ export const AppointmentDetailView = ({ appointmentId, patientId, onBack }: Appo
       // Check for conflicts
       const { hasConflict, conflictingPatient } = await checkAppointmentConflict(
         appointmentDateTime,
-        durationMinutes
+        durationMinutes,
+        undefined,
+        db
       );
 
       if (hasConflict) {
@@ -206,15 +200,13 @@ export const AppointmentDetailView = ({ appointmentId, patientId, onBack }: Appo
         return;
       }
 
-      const { data: appointmentData, error } = await supabase.from("appointments").insert({
+      const appointmentData = await db.createAppointment({
         doctor_id: user.id,
         patient_id: patientId,
         appointment_date: appointmentDateTime.toISOString(),
         duration_minutes: durationMinutes,
         notes: newAppointmentForm.notes || null,
-      }).select().single();
-
-      if (error) throw error;
+      });
 
       // Create reminder if selected
       if (newAppointmentForm.reminder_time !== "none" && appointmentData) {
@@ -228,7 +220,7 @@ export const AppointmentDetailView = ({ appointmentId, patientId, onBack }: Appo
         const offset = reminderOffsets[newAppointmentForm.reminder_time] || 24 * 60 * 60 * 1000;
         const reminderTime = new Date(appointmentDateTime.getTime() - offset);
 
-        await supabase.from("appointment_reminders").insert({
+        await db.createReminder({
           appointment_id: appointmentData.id,
           reminder_type: "in_app",
           reminder_time: reminderTime.toISOString(),
@@ -252,10 +244,7 @@ export const AppointmentDetailView = ({ appointmentId, patientId, onBack }: Appo
   const handleDownloadPrescription = async () => {
     try {
       // Get doctor's name
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("full_name")
-        .single();
+      const profile = await db.getProfile();
 
       const doctorName = profile?.full_name || "Doktor";
 
