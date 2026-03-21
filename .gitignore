@@ -32,3 +32,4 @@ src-tauri/gen
 *.sln
 *.sw?
 src-tauri/keys/
+migration-data/
