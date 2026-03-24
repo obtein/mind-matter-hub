@@ -33,11 +33,11 @@ const Login = () => {
         );
         if (profiles.length === 0) {
           await db.query(
-            "INSERT INTO profiles (user_id, full_name) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+            "INSERT INTO profiles (user_id, full_name) VALUES ($1, $2) ON CONFLICT (user_id) DO NOTHING",
             [user.id, user.user_metadata?.full_name || "Doktor"]
           );
           await db.query(
-            "INSERT INTO user_roles (user_id, role) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+            "INSERT INTO user_roles (user_id, role) VALUES ($1, $2) ON CONFLICT (user_id, role) DO NOTHING",
             [user.id, "doctor"]
           );
         }
