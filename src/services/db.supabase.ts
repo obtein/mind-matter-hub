@@ -25,7 +25,7 @@ export class SupabaseDbService implements DbService {
       .select("*")
       .order("created_at", { ascending: false });
     if (error) throw error;
-    return data || [];
+    return (data || []).map(p => ({ ...p, meslek: (p as any).meslek ?? null }));
   }
 
   async getPatientsWithLastAppointment(): Promise<(Patient & { last_appointment: string | null })[]> {
@@ -41,7 +41,7 @@ export class SupabaseDbService implements DbService {
       .eq("id", id)
       .maybeSingle();
     if (error) throw error;
-    return data;
+    return data ? { ...data, meslek: (data as any).meslek ?? null } : null;
   }
 
   async createPatient(data: PatientInsert): Promise<Patient> {
@@ -51,7 +51,7 @@ export class SupabaseDbService implements DbService {
       .select()
       .single();
     if (error) throw error;
-    return patient;
+    return { ...patient, meslek: (patient as any).meslek ?? null };
   }
 
   async updatePatient(id: string, data: Partial<Omit<PatientInsert, "doctor_id">>): Promise<void> {
