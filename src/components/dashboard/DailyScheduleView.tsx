@@ -1,74 +1,17 @@
-import { useState, useEffect } from "react";
-import { useDb } from "@/services/ServiceContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { toast } from "sonner";
 import { ChevronLeft, ChevronRight, Clock, User, Loader2 } from "lucide-react";
-import { handleError } from "@/lib/errorHandler";
-import { format, addDays, subDays, isSameDay, parseISO } from "date-fns";
+import { format } from "date-fns";
 import { tr } from "date-fns/locale";
 import { MonthlyCalendar } from "./MonthlyCalendar";
-
-interface Appointment {
-  id: string;
-  patient_id: string;
-  appointment_date: string;
-  duration_minutes: number;
-  notes: string | null;
-  status: string;
-  patients: { full_name: string } | null;
-}
+import { useSchedule, HOURS } from "@/viewmodels/useSchedule";
 
 interface DailyScheduleViewProps {
   onAppointmentSelect?: (appointmentId: string, patientId: string) => void;
 }
 
-const HOURS = Array.from({ length: 13 }, (_, i) => i + 8); // 08:00 - 20:00
-
 export const DailyScheduleView = ({ onAppointmentSelect }: DailyScheduleViewProps) => {
-  const db = useDb();
-  const [appointments, setAppointments] = useState<Appointment[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
-
-  useEffect(() => {
-    fetchAppointments();
-  }, [selectedDate]);
-
-  const fetchAppointments = async () => {
-    try {
-      setLoading(true);
-      const startOfDay = new Date(selectedDate);
-      startOfDay.setHours(0, 0, 0, 0);
-      
-      const endOfDay = new Date(selectedDate);
-      endOfDay.setHours(23, 59, 59, 999);
-
-      const data = await db.getAppointmentsByDateRange(startOfDay.toISOString(), endOfDay.toISOString());
-      setAppointments(data || []);
-    } catch (error: unknown) {
-      toast.error(handleError(error, "Randevular yüklenemedi"));
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const goToPreviousDay = () => setSelectedDate(subDays(selectedDate, 1));
-  const goToNextDay = () => setSelectedDate(addDays(selectedDate, 1));
-  const goToToday = () => setSelectedDate(new Date());
-
-  const handleDateSelect = (date: Date) => {
-    setSelectedDate(date);
-  };
-
-  const getAppointmentForHour = (hour: number) => {
-    return appointments.find((apt) => {
-      const aptDate = parseISO(apt.appointment_date);
-      return aptDate.getHours() === hour;
-    });
-  };
-
-  const isToday = isSameDay(selectedDate, new Date());
+  const vm = useSchedule();
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -80,14 +23,14 @@ export const DailyScheduleView = ({ onAppointmentSelect }: DailyScheduleViewProp
       </div>
 
       {/* Monthly Calendar */}
-      <MonthlyCalendar selectedDate={selectedDate} onDateSelect={handleDateSelect} />
+      <MonthlyCalendar selectedDate={vm.selectedDate} onDateSelect={vm.handleDateSelect} />
 
       {/* Date Navigation */}
       <div className="flex items-center justify-between gap-4 bg-card rounded-xl p-4 shadow-soft border">
         <Button
           variant="ghost"
           size="icon"
-          onClick={goToPreviousDay}
+          onClick={vm.goToPreviousDay}
           className="h-10 w-10"
         >
           <ChevronLeft className="w-5 h-5" />
@@ -96,14 +39,14 @@ export const DailyScheduleView = ({ onAppointmentSelect }: DailyScheduleViewProp
         <div className="flex items-center gap-4">
           <div className="text-center">
             <h2 className="text-xl font-display font-semibold">
-              {format(selectedDate, "d MMMM yyyy", { locale: tr })}
+              {format(vm.selectedDate, "d MMMM yyyy", { locale: tr })}
             </h2>
             <p className="text-sm text-muted-foreground">
-              {format(selectedDate, "EEEE", { locale: tr })}
+              {format(vm.selectedDate, "EEEE", { locale: tr })}
             </p>
           </div>
-          {!isToday && (
-            <Button variant="outline" size="sm" onClick={goToToday}>
+          {!vm.isToday && (
+            <Button variant="outline" size="sm" onClick={vm.goToToday}>
               Bugün
             </Button>
           )}
@@ -112,7 +55,7 @@ export const DailyScheduleView = ({ onAppointmentSelect }: DailyScheduleViewProp
         <Button
           variant="ghost"
           size="icon"
-          onClick={goToNextDay}
+          onClick={vm.goToNextDay}
           className="h-10 w-10"
         >
           <ChevronRight className="w-5 h-5" />
@@ -120,18 +63,18 @@ export const DailyScheduleView = ({ onAppointmentSelect }: DailyScheduleViewProp
       </div>
 
       {/* Time Slots */}
-      {loading ? (
+      {vm.loading ? (
         <div className="flex items-center justify-center h-32">
           <Loader2 className="w-6 h-6 animate-spin text-primary" />
         </div>
       ) : (
       <div className="space-y-2">
         {HOURS.map((hour) => {
-          const appointment = getAppointmentForHour(hour);
+          const appointment = vm.getAppointmentForHour(hour);
           const timeString = `${hour.toString().padStart(2, "0")}:00`;
           const currentHour = new Date().getHours();
-          const isPast = isToday && hour < currentHour;
-          const isCurrent = isToday && hour === currentHour;
+          const isPast = vm.isToday && hour < currentHour;
+          const isCurrent = vm.isToday && hour === currentHour;
 
           return (
             <div
