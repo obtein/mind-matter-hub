@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Users, Calendar, LogOut, BarChart3, Pill, RefreshCw, Loader2 } from "lucide-react";
+import { Users, Calendar, LogOut, BarChart3, Pill, RefreshCw, Loader2, Monitor } from "lucide-react";
+import { IS_TAURI } from "@/lib/platform";
 import { useAuth } from "@/services/ServiceContext";
 import { toast } from "sonner";
 import type { ViewState } from "@/pages/Dashboard";
@@ -129,6 +130,14 @@ export const DashboardSidebar = ({ viewState, setViewState, user }: DashboardSid
           {syncLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <RefreshCw className="w-5 h-5" />}
           <span>Verileri Senkronize Et</span>
         </SidebarMenuButton>
+        {!IS_TAURI && (
+          <SidebarMenuButton asChild className="w-full mb-2">
+            <a href="https://github.com/obtein/mind-matter-hub/releases/latest" target="_blank" rel="noopener noreferrer">
+              <Monitor className="w-5 h-5" />
+              <span>Masaüstü Uygulamayı İndir</span>
+            </a>
+          </SidebarMenuButton>
+        )}
         <SidebarMenuButton onClick={handleLogout} className="w-full text-destructive hover:text-destructive">
           <LogOut className="w-5 h-5" />
           <span>Çıkış Yap</span>
