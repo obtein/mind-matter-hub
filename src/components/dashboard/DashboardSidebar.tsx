@@ -132,7 +132,7 @@ export const DashboardSidebar = ({ viewState, setViewState, user }: DashboardSid
         </SidebarMenuButton>
         {!IS_TAURI && (
           <SidebarMenuButton asChild className="w-full mb-2">
-            <a href="https://github.com/obtein/mind-matter-hub/releases/latest" target="_blank" rel="noopener noreferrer">
+            <a href="/PsiTrak_0.4.2_x64_en-US.msi" download>
               <Monitor className="w-5 h-5" />
               <span>Masaüstü Uygulamayı İndir</span>
             </a>
