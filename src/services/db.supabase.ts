@@ -25,7 +25,7 @@ export class SupabaseDbService implements DbService {
       .select("*")
       .order("created_at", { ascending: false });
     if (error) throw error;
-    return data || [];
+    return (data || []).map(p => ({ ...p, meslek: (p as any).meslek ?? null }));
   }
 
   async getPatientsWithLastAppointment(): Promise<(Patient & { last_appointment: string | null })[]> {
