@@ -27,6 +27,21 @@ export class PGliteDbService implements DbService {
     return rows;
   }
 
+  async getPatientsWithLastAppointment(): Promise<(Patient & { last_appointment: string | null })[]> {
+    const db = await getPGlite();
+    const { rows } = await db.query<Patient & { last_appointment: string | null }>(
+      `SELECT p.*, a.last_date as last_appointment
+       FROM patients p
+       LEFT JOIN (
+         SELECT patient_id, MAX(appointment_date) as last_date
+         FROM appointments
+         GROUP BY patient_id
+       ) a ON a.patient_id = p.id
+       ORDER BY p.created_at DESC`
+    );
+    return rows;
+  }
+
   async getPatient(id: string): Promise<Patient | null> {
     const db = await getPGlite();
     const { rows } = await db.query<Patient>(

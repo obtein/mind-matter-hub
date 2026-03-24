@@ -60,15 +60,7 @@ export const PatientsView = ({ onPatientSelect }: PatientsViewProps) => {
 
   const fetchPatients = async () => {
     try {
-      const patientsData = await db.getPatients();
-
-      // Fetch last appointment for each patient
-      const patientsWithAppointments = await Promise.all(
-        (patientsData || []).map(async (patient) => {
-          const lastDate = await db.getLastAppointmentDate(patient.id);
-          return { ...patient, last_appointment: lastDate };
-        })
-      );
+      const patientsWithAppointments = await db.getPatientsWithLastAppointment();
 
       setPatients(patientsWithAppointments);
     } catch (error: any) {

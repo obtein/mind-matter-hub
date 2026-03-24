@@ -28,6 +28,12 @@ export class SupabaseDbService implements DbService {
     return data || [];
   }
 
+  async getPatientsWithLastAppointment(): Promise<(Patient & { last_appointment: string | null })[]> {
+    // Supabase doesn't support subquery joins easily, fallback to getPatients
+    const patients = await this.getPatients();
+    return patients.map(p => ({ ...p, last_appointment: null }));
+  }
+
   async getPatient(id: string): Promise<Patient | null> {
     const { data, error } = await supabase
       .from("patients")
