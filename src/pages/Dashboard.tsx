@@ -9,7 +9,6 @@ import { AppointmentDetailView } from "@/components/dashboard/AppointmentDetailV
 import { StatisticsView } from "@/components/dashboard/StatisticsView";
 import { MedicationsReportView } from "@/components/dashboard/MedicationsReportView";
 import { NotificationBell } from "@/components/dashboard/NotificationBell";
-import { UpdateChecker } from "@/components/desktop/UpdateChecker";
 import { AutoSync } from "@/components/desktop/AutoSync";
 import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui/sidebar";
 import type { AppUser } from "@/services/auth";
@@ -67,7 +66,6 @@ const Dashboard = () => {
 
   return (
     <SidebarProvider>
-      <UpdateChecker />
       <AutoSync />
       <div className="min-h-screen flex w-full bg-background">
         <DashboardSidebar 
