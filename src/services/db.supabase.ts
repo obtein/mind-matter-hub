@@ -41,7 +41,7 @@ export class SupabaseDbService implements DbService {
       .eq("id", id)
       .maybeSingle();
     if (error) throw error;
-    return data;
+    return data ? { ...data, meslek: (data as any).meslek ?? null } : null;
   }
 
   async createPatient(data: PatientInsert): Promise<Patient> {
