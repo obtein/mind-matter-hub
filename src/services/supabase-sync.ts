@@ -1,24 +1,32 @@
 import { getPGlite } from "./pglite/init";
+import { supabase } from "@/integrations/supabase/client";
 
-// ── Hardcoded Supabase credentials (tek kullanıcı) ──
+// ── Supabase REST API (credentials from .env via supabase client) ──
 
-const SYNC_URL = "https://vhdhwnvfomwzauvqozxo.supabase.co";
-const SYNC_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZoZGh3bnZmb213emF1dnFvenhvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQxMTYwMjMsImV4cCI6MjA4OTY5MjAyM30.w58tok4ZmJGlkEqBfF1meH3BXJJLqM1ji5w4R8yWvsc";
+const SYNC_URL = import.meta.env.VITE_SUPABASE_URL;
+const SYNC_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
-const HEADERS = {
-  apikey: SYNC_KEY,
-  Authorization: `Bearer ${SYNC_KEY}`,
-  "Content-Type": "application/json",
-};
+function getHeaders(accessToken?: string) {
+  return {
+    apikey: SYNC_KEY,
+    Authorization: `Bearer ${accessToken || SYNC_KEY}`,
+    "Content-Type": "application/json",
+  };
+}
+
+async function getAuthHeaders() {
+  const { data: { session } } = await supabase.auth.getSession();
+  return getHeaders(session?.access_token);
+}
 
 // ── Helpers ──
 
-async function upsertTable(table: string, rows: Record<string, unknown>[]): Promise<void> {
+async function upsertTable(table: string, rows: Record<string, unknown>[], headers: Record<string, string>): Promise<void> {
   if (rows.length === 0) return;
 
   const res = await fetch(`${SYNC_URL}/rest/v1/${table}`, {
     method: "POST",
-    headers: { ...HEADERS, Prefer: "resolution=merge-duplicates" },
+    headers: { ...headers, Prefer: "resolution=merge-duplicates" },
     body: JSON.stringify(rows),
   });
 
@@ -28,8 +36,8 @@ async function upsertTable(table: string, rows: Record<string, unknown>[]): Prom
   }
 }
 
-async function fetchTable(table: string): Promise<Record<string, unknown>[]> {
-  const res = await fetch(`${SYNC_URL}/rest/v1/${table}?select=*`, { headers: HEADERS });
+async function fetchTable(table: string, headers: Record<string, string>): Promise<Record<string, unknown>[]> {
+  const res = await fetch(`${SYNC_URL}/rest/v1/${table}?select=*`, { headers });
   if (!res.ok) return [];
   return await res.json();
 }
@@ -37,13 +45,13 @@ async function fetchTable(table: string): Promise<Record<string, unknown>[]> {
 // ── Upload: Lokal → Supabase ──
 
 export async function hasSyncCredentials(): Promise<boolean> {
-  const db = await getPGlite();
-  const { rows } = await db.query("SELECT COUNT(*)::int as count FROM local_users");
-  return (rows[0] as any)?.count > 0;
+  const { data: { session } } = await supabase.auth.getSession();
+  return !!session;
 }
 
 export async function syncToSupabase(): Promise<{ success: boolean; message: string }> {
   try {
+    const headers = await getAuthHeaders();
     const db = await getPGlite();
 
     const tables = [
@@ -53,7 +61,7 @@ export async function syncToSupabase(): Promise<{ success: boolean; message: str
 
     for (const table of tables) {
       const { rows } = await db.query(`SELECT * FROM ${table}`);
-      await upsertTable(table, rows as Record<string, unknown>[]);
+      await upsertTable(table, rows as Record<string, unknown>[], headers);
     }
 
     return { success: true, message: "Veriler basariyla yedeklendi" };
@@ -74,14 +82,15 @@ export async function syncFromSupabase(
   onProgress?: (p: SyncProgress) => void
 ): Promise<{ success: boolean; message: string }> {
   try {
+    const headers = await getAuthHeaders();
     const db = await getPGlite();
 
-    // Lokal kullanıcı var mı kontrol
-    const { rows: users } = await db.query<{ id: string }>("SELECT id FROM local_users LIMIT 1");
-    if (!users[0]) {
+    // Supabase auth user ID'sini al
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
       return { success: false, message: "Once giris yapin" };
     }
-    const localUserId = users[0].id;
+    const localUserId = user.id;
 
     onProgress?.({ step: "Sunucudan veriler indiriliyor...", percent: 10 });
 
@@ -92,7 +101,7 @@ export async function syncFromSupabase(
     for (let i = 0; i < tableNames.length; i++) {
       const table = tableNames[i];
       onProgress?.({ step: `${table} indiriliyor...`, percent: 10 + Math.round(((i + 1) / tableNames.length) * 40) });
-      data[table] = await fetchTable(table);
+      data[table] = await fetchTable(table, headers);
     }
 
     onProgress?.({ step: "Yerel veritabani guncelleniyor...", percent: 55 });
