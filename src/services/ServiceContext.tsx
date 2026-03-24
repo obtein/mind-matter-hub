@@ -30,10 +30,10 @@ export function ServiceProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     async function init() {
       try {
-        const { LocalAuthService } = await import("./auth.local");
+        const { SupabaseAuthService } = await import("./auth.supabase");
         const { PGliteDbService } = await import("./db.pglite");
         setServices({
-          auth: new LocalAuthService(),
+          auth: new SupabaseAuthService(),
           db: new PGliteDbService(),
         });
       } catch (err) {

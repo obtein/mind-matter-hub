@@ -8,6 +8,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { toast } from "sonner";
 import { Heart, Shield, Loader2 } from "lucide-react";
 import psiTrakLogo from "/favicon.png";
+import { syncFromSupabase } from "@/services/supabase-sync";
+import { getPGlite } from "@/services/pglite/init";
 
 const Login = () => {
   const navigate = useNavigate();
@@ -18,8 +20,9 @@ const Login = () => {
 
   // Auto login: mevcut oturum varsa direkt dashboard'a yönlendir
   useEffect(() => {
-    auth.getSession().then(({ user }) => {
+    auth.getSession().then(async ({ user }) => {
       if (user) {
+        await ensureLocalData();
         navigate("/dashboard", { replace: true });
       } else {
         setCheckingSession(false);
@@ -35,6 +38,44 @@ const Login = () => {
     );
   }
 
+  // İlk girişte lokal DB boşsa Supabase'den veri çek
+  const ensureLocalData = async () => {
+    try {
+      const db = await getPGlite();
+
+      // Supabase user bilgisini al
+      const user = await auth.getUser();
+      if (!user) return;
+
+      // Lokal profil yoksa oluştur
+      const { rows: profiles } = await db.query<{ user_id: string }>(
+        "SELECT user_id FROM profiles WHERE user_id = $1", [user.id]
+      );
+      if (profiles.length === 0) {
+        await db.query(
+          "INSERT INTO profiles (user_id, full_name) VALUES ($1, $2) ON CONFLICT(user_id) DO NOTHING",
+          [user.id, user.user_metadata?.full_name || "Doktor"]
+        );
+        await db.query(
+          "INSERT INTO user_roles (user_id, role) VALUES ($1, 'doctor') ON CONFLICT(user_id, role) DO NOTHING",
+          [user.id]
+        );
+      }
+
+      // Hasta yoksa Supabase'den çek
+      const { rows } = await db.query<{ count: number }>("SELECT COUNT(*)::int as count FROM patients");
+      if ((rows[0]?.count ?? 0) === 0) {
+        toast.info("Veriler senkronize ediliyor...");
+        const result = await syncFromSupabase();
+        if (result.success) {
+          toast.success(result.message);
+        }
+      }
+    } catch (err) {
+      console.error("İlk sync hatası:", err);
+    }
+  };
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
@@ -48,6 +89,7 @@ const Login = () => {
       }
 
       toast.success("Giriş başarılı!");
+      await ensureLocalData();
       navigate("/dashboard");
     } catch {
       toast.error("Giriş yapılamadı. Lütfen tekrar deneyin.");
