@@ -36,8 +36,18 @@ async function upsertTable(table: string, rows: Record<string, unknown>[], heade
   }
 }
 
-async function fetchTable(table: string, headers: Record<string, string>): Promise<Record<string, unknown>[]> {
-  const res = await fetch(`${SYNC_URL}/rest/v1/${table}?select=*`, { headers });
+async function fetchTable(table: string, headers: Record<string, string>, userId?: string): Promise<Record<string, unknown>[]> {
+  // Kullanıcıya özel filtreleme: doctor_id veya user_id ile
+  let url = `${SYNC_URL}/rest/v1/${table}?select=*`;
+  if (userId) {
+    // Tabloya göre doğru kolon ile filtrele
+    const ownerCol = table === "notifications" ? "user_id" : "doctor_id";
+    // session_medications ve appointment_reminders'da owner kolon yok, hepsini çek
+    if (["patients", "appointments", "patient_notes", "notifications"].includes(table)) {
+      url += `&${ownerCol}=eq.${userId}`;
+    }
+  }
+  const res = await fetch(url, { headers });
   if (!res.ok) return [];
   return await res.json();
 }
@@ -155,8 +165,8 @@ export async function syncFromSupabase(
       const pct = Math.round(((i + 1) / tables.length) * 80) + 10;
       onProgress?.({ step: `${t.name} senkronize ediliyor...`, percent: pct });
 
-      // Her iki taraftan ID'leri çek
-      const remoteRows = await fetchTable(t.name, headers);
+      // Her iki taraftan ID'leri çek (kullanıcıya özel)
+      const remoteRows = await fetchTable(t.name, headers, userId);
       const { rows: localRows } = await db.query(`SELECT * FROM ${t.name}`);
 
       const localIds = new Set((localRows as any[]).map((r) => r[t.idCol]));
