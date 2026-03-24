@@ -10,6 +10,7 @@ export const AutoSync = () => {
     const setup = async () => {
       try {
         const { getCurrentWindow } = await import("@tauri-apps/api/window");
+        const { exit } = await import("@tauri-apps/plugin-process");
         const appWindow = getCurrentWindow();
 
         unlisten = await appWindow.onCloseRequested(async (event) => {
@@ -19,17 +20,20 @@ export const AutoSync = () => {
             const { hasSyncCredentials, syncToSupabase } = await import("@/services/supabase-sync");
 
             if (await hasSyncCredentials()) {
-              // Max 15 saniye bekle, sonra yine de kapat
-              const syncPromise = syncToSupabase();
-              const timeoutPromise = new Promise((resolve) => setTimeout(resolve, 15000));
+              const syncPromise = syncToSupabase().catch(() => {});
+              const timeoutPromise = new Promise((resolve) => setTimeout(resolve, 10000));
               await Promise.race([syncPromise, timeoutPromise]);
             }
-          } catch (err) {
-            console.error("AutoSync error:", err);
+          } catch {
+            // Sync hatası kapanmayı engellememeli
           }
 
-          // Her durumda kapat
-          await appWindow.destroy();
+          // Her durumda uygulamayı kapat
+          try {
+            await appWindow.destroy();
+          } catch {
+            try { await exit(0); } catch { /* son çare */ }
+          }
         });
       } catch (err) {
         console.error("AutoSync setup error:", err);
