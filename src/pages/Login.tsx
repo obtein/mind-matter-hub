@@ -9,7 +9,7 @@ import { toast } from "sonner";
 import { Heart, Shield, Loader2 } from "lucide-react";
 import psiTrakLogo from "/favicon.png";
 import { syncFromSupabase } from "@/services/supabase-sync";
-import { getPGlite } from "@/services/pglite/init";
+import { initUserDb } from "@/services/pglite/init";
 import { remoteLog } from "@/services/remote-logger";
 
 const Login = () => {
@@ -22,9 +22,11 @@ const Login = () => {
   // İlk girişte lokal DB'de profil ve veri yoksa hazırla
   const ensureLocalData = async () => {
     try {
-      const db = await getPGlite();
       const user = await auth.getUser();
       if (!user) return;
+
+      // Kullanıcıya özel DB başlat
+      const db = await initUserDb(user.id);
 
       // Lokal profil yoksa oluştur
       try {
