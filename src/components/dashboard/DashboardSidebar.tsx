@@ -44,6 +44,8 @@ export const DashboardSidebar = ({ viewState, setViewState, user }: DashboardSid
         await syncToSupabase();
         toast.dismiss("logout-sync");
       }
+      const { closePGlite } = await import("@/services/pglite/init");
+      await closePGlite();
       await auth.signOut();
       toast.success("Çıkış yapıldı");
     } catch {
