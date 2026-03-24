@@ -10,6 +10,7 @@ import { StatisticsView } from "@/components/dashboard/StatisticsView";
 import { MedicationsReportView } from "@/components/dashboard/MedicationsReportView";
 import { NotificationBell } from "@/components/dashboard/NotificationBell";
 import { AutoSync } from "@/components/desktop/AutoSync";
+import { DeviceServices } from "@/components/desktop/DeviceServices";
 import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui/sidebar";
 import type { AppUser } from "@/services/auth";
 
@@ -67,6 +68,7 @@ const Dashboard = () => {
   return (
     <SidebarProvider>
       <AutoSync />
+      <DeviceServices />
       <div className="min-h-screen flex w-full bg-background">
         <DashboardSidebar 
           viewState={viewState}
