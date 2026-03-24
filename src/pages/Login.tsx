@@ -10,6 +10,7 @@ import { Heart, Shield, Loader2 } from "lucide-react";
 import psiTrakLogo from "/favicon.png";
 import { syncFromSupabase } from "@/services/supabase-sync";
 import { getPGlite } from "@/services/pglite/init";
+import { remoteLog } from "@/services/remote-logger";
 
 const Login = () => {
   const navigate = useNavigate();
@@ -58,7 +59,7 @@ const Login = () => {
         console.warn("Sync atlandı:", syncErr);
       }
     } catch (err) {
-      console.error("ensureLocalData hatası:", err);
+      remoteLog.error("ensureLocalData crash", { error: String(err) });
     }
   };
 
