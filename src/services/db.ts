@@ -129,6 +129,7 @@ export interface UpcomingAppointment {
 export interface DbService {
   // Patients
   getPatients(): Promise<Patient[]>;
+  getPatientsWithLastAppointment(): Promise<(Patient & { last_appointment: string | null })[]>;
   getPatient(id: string): Promise<Patient | null>;
   createPatient(data: PatientInsert): Promise<Patient>;
   updatePatient(id: string, data: Partial<Omit<PatientInsert, "doctor_id">>): Promise<void>;
