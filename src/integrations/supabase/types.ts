@@ -199,6 +199,7 @@ export type Database = {
           full_name: string
           gender: string | null
           id: string
+          meslek: string | null
           notes: string | null
           phone: string | null
           tc_identity: string | null
@@ -214,6 +215,7 @@ export type Database = {
           full_name: string
           gender?: string | null
           id?: string
+          meslek?: string | null
           notes?: string | null
           phone?: string | null
           tc_identity?: string | null
@@ -229,6 +231,7 @@ export type Database = {
           full_name?: string
           gender?: string | null
           id?: string
+          meslek?: string | null
           notes?: string | null
           phone?: string | null
           tc_identity?: string | null

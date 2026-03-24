@@ -51,7 +51,7 @@ export class SupabaseDbService implements DbService {
       .select()
       .single();
     if (error) throw error;
-    return patient;
+    return { ...patient, meslek: (patient as any).meslek ?? null };
   }
 
   async updatePatient(id: string, data: Partial<Omit<PatientInsert, "doctor_id">>): Promise<void> {
