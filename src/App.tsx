@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { ServiceProvider } from "@/services/ServiceContext";
 import { UpdateChecker } from "@/components/desktop/UpdateChecker";
+import "@/services/remote-logger"; // Global error logging to Supabase
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import NotFound from "./pages/NotFound";
