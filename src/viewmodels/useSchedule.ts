@@ -69,8 +69,13 @@ export function useSchedule() {
   const getAppointmentForHour = useCallback(
     (hour: number): ScheduleAppointment | undefined => {
       return appointments.find((apt) => {
-        const aptDate = parseISO(apt.appointment_date);
-        return aptDate.getHours() === hour;
+        try {
+          if (!apt.appointment_date) return false;
+          const aptDate = parseISO(apt.appointment_date);
+          return aptDate.getHours() === hour;
+        } catch {
+          return false;
+        }
       });
     },
     [appointments]

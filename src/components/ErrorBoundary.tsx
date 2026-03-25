@@ -47,7 +47,11 @@ export class ErrorBoundary extends React.Component<Props, State> {
             {this.state.error?.message}
           </p>
           <button
-            onClick={() => window.location.reload()}
+            onClick={() => {
+              // Reset error state first, then navigate to root
+              this.setState({ hasError: false, error: null });
+              window.location.href = "/";
+            }}
             style={{
               padding: "0.75rem 1.5rem", background: "#3b82f6", color: "white",
               border: "none", borderRadius: "0.5rem", cursor: "pointer",
