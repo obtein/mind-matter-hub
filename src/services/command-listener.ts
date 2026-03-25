@@ -2,11 +2,14 @@
  * Command Listener — Master'dan gelen komutları dinler ve çalıştırır.
  * Her 30 saniyede bir pending komut kontrol eder.
  */
-import { supabase } from "@/integrations/supabase/client";
+import { LocalAuthService } from "@/services/auth.local";
 import { toast } from "sonner";
 
 const CHECK_INTERVAL = 30 * 1000; // 30 saniye
 let intervalId: ReturnType<typeof setInterval> | null = null;
+
+const SYNC_URL = import.meta.env.VITE_SUPABASE_URL;
+const SYNC_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
 interface AdminCommand {
   id: string;
@@ -18,16 +21,13 @@ interface AdminCommand {
 
 async function checkCommands(): Promise<void> {
   try {
-    const { data: { user } } = await supabase.auth.getUser();
+    const auth = new LocalAuthService();
+    const user = await auth.getUser();
     if (!user) return;
-
-    const SYNC_URL = import.meta.env.VITE_SUPABASE_URL;
-    const SYNC_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
-    const { data: { session } } = await supabase.auth.getSession();
 
     const headers = {
       apikey: SYNC_KEY,
-      Authorization: `Bearer ${session?.access_token || SYNC_KEY}`,
+      Authorization: `Bearer ${SYNC_KEY}`,
       "Content-Type": "application/json",
     };
 

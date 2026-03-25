@@ -2,25 +2,25 @@
  * Heartbeat servisi — Her 2 dakikada bir Supabase'e cihaz durumu gönderir.
  * Master (admin) uygulaması bu verileri okuyarak slave'leri izler.
  */
-import { supabase } from "@/integrations/supabase/client";
+import { LocalAuthService } from "@/services/auth.local";
 
 const HEARTBEAT_INTERVAL = 2 * 60 * 1000; // 2 dakika
 let intervalId: ReturnType<typeof setInterval> | null = null;
 
+const SYNC_URL = import.meta.env.VITE_SUPABASE_URL;
+const SYNC_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+
 async function sendHeartbeat(): Promise<void> {
   try {
-    const { data: { user } } = await supabase.auth.getUser();
+    const auth = new LocalAuthService();
+    const user = await auth.getUser();
     if (!user) return;
-
-    const SYNC_URL = import.meta.env.VITE_SUPABASE_URL;
-    const SYNC_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
-    const { data: { session } } = await supabase.auth.getSession();
 
     await fetch(`${SYNC_URL}/rest/v1/device_heartbeats`, {
       method: "POST",
       headers: {
         apikey: SYNC_KEY,
-        Authorization: `Bearer ${session?.access_token || SYNC_KEY}`,
+        Authorization: `Bearer ${SYNC_KEY}`,
         "Content-Type": "application/json",
         Prefer: "resolution=merge-duplicates",
       },
