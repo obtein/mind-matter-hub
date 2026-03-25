@@ -94,8 +94,8 @@ export function usePatientDetail(patientId: string) {
         const medsData = await medicationRepo.getByAppointmentIds(appointmentIds);
         setMedications(medsData);
       }
-    } catch (error: any) {
-      toast.error("Veriler yüklenemedi");
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : "Veriler yüklenemedi");
     } finally {
       setLoading(false);
     }
@@ -185,6 +185,10 @@ export function usePatientDetail(patientId: string) {
         const appointmentDateTime = new Date(
           `${formData.appointment_date}T${formData.appointment_time}`
         );
+        if (isNaN(appointmentDateTime.getTime())) {
+          toast.error("Geçersiz tarih veya saat formatı");
+          return;
+        }
         const durationMinutes = parseInt(formData.duration_minutes);
 
         // Check for conflicts
@@ -225,7 +229,7 @@ export function usePatientDetail(patientId: string) {
         setIsDialogOpen(false);
         setFormData({ ...DEFAULT_FORM });
         fetchData();
-      } catch (error: any) {
+      } catch (error: unknown) {
         toast.error(handleError(error, "Randevu oluşturulamadı"));
       }
     },
@@ -238,7 +242,7 @@ export function usePatientDetail(patientId: string) {
         await appointmentRepo.delete(appointmentId);
         toast.success("Randevu silindi");
         fetchData();
-      } catch (error: any) {
+      } catch (error: unknown) {
         toast.error(handleError(error, "Randevu silinemedi"));
       }
     },

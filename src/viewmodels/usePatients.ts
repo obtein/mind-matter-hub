@@ -35,6 +35,7 @@ export function usePatients() {
   const [editingPatient, setEditingPatient] = useState<PatientWithAppointment | null>(null);
   const [deletePatientId, setDeletePatientId] = useState<string | null>(null);
   const [formData, setFormData] = useState<PatientFormData>(EMPTY_FORM);
+  const [displayCount, setDisplayCount] = useState(50);
 
   const fetchPatients = useCallback(async () => {
     try {
@@ -51,6 +52,11 @@ export function usePatients() {
 
   useEffect(() => { fetchPatients(); }, [fetchPatients]);
 
+  // Reset pagination when filters change
+  useEffect(() => {
+    setDisplayCount(50);
+  }, [searchTerm, genderFilter]);
+
   const filteredPatients = useMemo(() => {
     return patients.filter((p) => {
       const matchesSearch = p.full_name.toLowerCase().includes(searchTerm.toLowerCase()) || p.phone?.includes(searchTerm);
@@ -58,6 +64,17 @@ export function usePatients() {
       return matchesSearch && matchesGender;
     });
   }, [patients, searchTerm, genderFilter]);
+
+  const displayedPatients = useMemo(
+    () => filteredPatients.slice(0, displayCount),
+    [filteredPatients, displayCount]
+  );
+
+  const hasMore = displayCount < filteredPatients.length;
+
+  const loadMore = useCallback(() => {
+    setDisplayCount((prev) => prev + 50);
+  }, []);
 
   const resetForm = useCallback(() => {
     setEditingPatient(null);
@@ -120,7 +137,7 @@ export function usePatients() {
       resetForm();
       await fetchPatients();
       return true;
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast.error(handleError(error, "Hasta kaydedilemedi"));
       return false;
     }
@@ -131,7 +148,7 @@ export function usePatients() {
       await repo.delete(id);
       toast.success("Hasta silindi");
       await fetchPatients();
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast.error(handleError(error, "Hasta silinemedi"));
     }
   }, [repo, fetchPatients]);
@@ -153,6 +170,8 @@ export function usePatients() {
     deletePatientId,
     formData,
     filteredPatients,
+    displayedPatients,
+    hasMore,
 
     // Setters
     setSearchTerm,
@@ -168,6 +187,7 @@ export function usePatients() {
     deletePatient,
     resetForm,
     clearFilters,
+    loadMore,
     refresh: fetchPatients,
   };
 }

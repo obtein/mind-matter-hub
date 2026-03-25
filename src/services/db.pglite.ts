@@ -126,7 +126,24 @@ export class PGliteDbService implements DbService {
   async deletePatient(id: string): Promise<void> {
     try {
       const db = await getPGlite();
-      await db.query("DELETE FROM patients WHERE id = $1", [id]);
+      await db.query("BEGIN");
+      try {
+        await db.query(
+          "DELETE FROM session_medications WHERE appointment_id IN (SELECT id FROM appointments WHERE patient_id = $1)",
+          [id]
+        );
+        await db.query(
+          "DELETE FROM appointment_reminders WHERE appointment_id IN (SELECT id FROM appointments WHERE patient_id = $1)",
+          [id]
+        );
+        await db.query("DELETE FROM patient_notes WHERE patient_id = $1", [id]);
+        await db.query("DELETE FROM appointments WHERE patient_id = $1", [id]);
+        await db.query("DELETE FROM patients WHERE id = $1", [id]);
+        await db.query("COMMIT");
+      } catch (innerError) {
+        await db.query("ROLLBACK");
+        throw innerError;
+      }
     } catch (error) {
       console.error("[db.deletePatient] failed:", error);
       remoteLog.error("db.deletePatient failed", { error: (error as Error).message });

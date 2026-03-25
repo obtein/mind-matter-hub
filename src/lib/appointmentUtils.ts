@@ -36,7 +36,7 @@ export const checkAppointmentConflict = async (
     if (startTime < aptEnd && endTime > aptStart) {
       return {
         hasConflict: true,
-        conflictingPatient: (apt.patients as any)?.full_name || "Bilinmeyen Hasta",
+        conflictingPatient: (apt.patients as Record<string, unknown> | undefined)?.full_name as string || "Bilinmeyen Hasta",
       };
     }
   }

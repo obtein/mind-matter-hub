@@ -1,5 +1,6 @@
 import { getPGlite } from "./pglite/init";
 import type { AuthService, AppUser } from "./auth";
+import { safeGetItem, safeSetItem, safeRemoveItem } from "@/lib/storage";
 
 type AuthCallback = (event: string, user: AppUser | null) => void;
 
@@ -8,21 +9,15 @@ const SESSION_KEY = "psitrak_local_session";
 let listeners: AuthCallback[] = [];
 
 function getStoredUserId(): string | null {
-  try {
-    return localStorage.getItem(SESSION_KEY);
-  } catch {
-    return null;
-  }
+  return safeGetItem(SESSION_KEY);
 }
 
 function storeUserId(userId: string | null): void {
-  try {
-    if (userId) {
-      localStorage.setItem(SESSION_KEY, userId);
-    } else {
-      localStorage.removeItem(SESSION_KEY);
-    }
-  } catch { /* ignore */ }
+  if (userId) {
+    safeSetItem(SESSION_KEY, userId);
+  } else {
+    safeRemoveItem(SESSION_KEY);
+  }
 }
 
 function emit(event: string, user: AppUser | null) {
@@ -54,7 +49,7 @@ export class LocalAuthService implements AuthService {
       if (rows.length === 0) {
         // Check if there are NO users at all (first-run: auto-create)
         const countResult = await db.query("SELECT COUNT(*)::int as count FROM local_users");
-        const count = (countResult.rows[0] as any)?.count ?? 0;
+        const count = (countResult.rows[0] as Record<string, unknown> | undefined)?.count ?? 0;
 
         if (count === 0) {
           // First run — create the user automatically

@@ -215,7 +215,7 @@ export const PatientsView = ({ onPatientSelect }: PatientsViewProps) => {
               key={patient.id}
               className="group hover:shadow-medium transition-all duration-300 animate-slide-up cursor-pointer"
               style={{ animationDelay: `${index * 50}ms` }}
-              onClick={() => onPatientSelect(patient.id)}
+              onClick={() => { if (patient.id) onPatientSelect(patient.id); }}
             >
               <CardHeader className="pb-3">
                 <div className="flex items-start justify-between">
