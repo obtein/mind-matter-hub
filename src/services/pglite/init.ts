@@ -45,8 +45,20 @@ export async function getPGlite(): Promise<PGlite> {
   initPromise = (async () => {
     const dbName = currentUserId ? `idb://psitrak_${currentUserId}` : "idb://psitrak_default";
 
-    const instance = new PGlite(dbName);
-    await instance.waitReady;
+    let instance: PGlite;
+    try {
+      instance = new PGlite(dbName);
+      await instance.waitReady;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      // IndexedDB quota exceeded or access denied
+      if (message.includes("quota") || message.includes("QuotaExceededError") || message.includes("storage")) {
+        dbInitError = "Depolama alanı dolu. Lütfen tarayıcı verilerini temizleyin veya disk alanı açın.";
+      } else {
+        dbInitError = `Veritabanı başlatılamadı: ${message}`;
+      }
+      throw new Error(dbInitError);
+    }
 
     const result = await instance.query<{ exists: boolean }>(
       "SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'patients')"

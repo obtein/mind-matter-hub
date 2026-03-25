@@ -85,6 +85,24 @@ export function useMedications() {
     );
   }, [medications, searchTerm]);
 
+  // Pagination for large medication lists
+  const [displayCount, setDisplayCount] = useState(50);
+
+  useEffect(() => {
+    setDisplayCount(50);
+  }, [searchTerm]);
+
+  const displayedMedications = useMemo(
+    () => filteredMedications.slice(0, displayCount),
+    [filteredMedications, displayCount]
+  );
+
+  const hasMoreMedications = displayCount < filteredMedications.length;
+
+  const loadMoreMedications = useCallback(() => {
+    setDisplayCount((prev) => prev + 50);
+  }, []);
+
   const uniquePatientCount = useMemo(() => {
     return new Set(
       medications.map((m) => m.appointment?.patient?.id).filter(Boolean)
@@ -99,6 +117,8 @@ export function useMedications() {
     medicationSummary,
     sortedSummary,
     filteredMedications,
+    displayedMedications,
+    hasMoreMedications,
     uniquePatientCount,
 
     // Setters
@@ -106,5 +126,6 @@ export function useMedications() {
 
     // Actions
     refresh: fetchMedications,
+    loadMoreMedications,
   };
 }
