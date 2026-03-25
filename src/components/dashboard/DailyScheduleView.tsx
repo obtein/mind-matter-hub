@@ -99,7 +99,11 @@ export const DailyScheduleView = ({ onAppointmentSelect }: DailyScheduleViewProp
                         ? "border-l-red-500 bg-red-50/50 dark:bg-red-950/20"
                         : "border-l-primary bg-primary/5"
                     } transition-all hover:shadow-medium`}
-                    onClick={() => onAppointmentSelect?.(appointment.id, appointment.patient_id)}
+                    onClick={() => {
+                      if (appointment.id && appointment.patient_id) {
+                        onAppointmentSelect?.(appointment.id, appointment.patient_id);
+                      }
+                    }}
                   >
                     <CardContent className="p-4">
                       <div className="flex items-start justify-between">
