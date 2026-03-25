@@ -26,9 +26,11 @@ async function sendHeartbeat(): Promise<void> {
       },
       body: JSON.stringify({
         user_id: user.id,
+        // NOTE: user_email is sent intentionally — it only goes to our own Supabase
+        // for the admin panel to identify devices. Not sent to any third party.
         user_email: user.email,
         app_version: typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "unknown",
-        platform: (window as any).__TAURI__ ? "desktop" : "web",
+        platform: "__TAURI__" in window ? "desktop" : "web",
         os_info: navigator.userAgent.substring(0, 200),
         last_seen_at: new Date().toISOString(),
       }),

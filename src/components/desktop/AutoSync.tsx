@@ -34,7 +34,9 @@ export const AutoSync = () => {
                   }),
                 ]);
 
-                if (!result.success) {
+                if (result.success) {
+                  remoteLog.info("AutoSync completed on close");
+                } else {
                   // Sync başarısız — sonraki açılışta tekrar denesin
                   localStorage.setItem("psitrak_pending_sync", "true");
                   remoteLog.warn("AutoSync failed on close", { message: result.message });
@@ -48,13 +50,13 @@ export const AutoSync = () => {
             }
           } catch {
             // Sync modülü yüklenemedi — kapanmayı engelleme
-          }
-
-          // Her durumda uygulamayı kapat
-          try {
-            await appWindow.destroy();
-          } catch {
-            try { await exit(0); } catch { /* son çare */ }
+          } finally {
+            // Always close the app — never hang on sync failure
+            try {
+              await appWindow.destroy();
+            } catch {
+              try { await exit(0); } catch { /* son çare */ }
+            }
           }
         });
       } catch (err) {

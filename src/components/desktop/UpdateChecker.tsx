@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { IS_TAURI } from "@/lib/platform";
 import { toast } from "sonner";
+import { safeGetItem, safeSetItem } from "@/lib/storage";
 
 /**
  * UpdateChecker - Handles automatic updates for the desktop (Tauri) app.
@@ -28,7 +29,7 @@ export const UpdateChecker = () => {
         // schtasks check failed, assume not present
       }
 
-      const taskDismissed = localStorage.getItem("psitrak_task_dismissed") === "true";
+      const taskDismissed = safeGetItem("psitrak_task_dismissed") === "true";
 
       if (!taskExists && !taskDismissed) {
         // Show a one-time toast asking for admin permission
@@ -59,12 +60,12 @@ export const UpdateChecker = () => {
                     });
                   }
                 }
-                localStorage.setItem("psitrak_task_dismissed", "true");
+                safeSetItem("psitrak_task_dismissed", "true");
               },
             },
             onDismiss: () => {
               // User dismissed the toast — don't show again
-              localStorage.setItem("psitrak_task_dismissed", "true");
+              safeSetItem("psitrak_task_dismissed", "true");
             },
           }
         );

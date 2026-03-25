@@ -50,7 +50,7 @@ export const PatientDetailView = ({ patientId, onBack, onAppointmentSelect }: Pa
           <ArrowLeft className="w-5 h-5" />
         </Button>
         <div className="flex-1">
-          <h1 className="text-3xl font-display font-bold text-foreground">{vm.patient.full_name}</h1>
+          <h1 className="text-3xl font-display font-bold text-foreground">{vm.patient?.full_name}</h1>
           <p className="text-muted-foreground">Hasta Detayları</p>
         </div>
       </div>
@@ -64,55 +64,55 @@ export const PatientDetailView = ({ patientId, onBack, onAppointmentSelect }: Pa
           </CardTitle>
         </CardHeader>
         <CardContent className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {vm.patient.gender && (
+          {vm.patient?.gender && (
             <div className="flex items-center gap-3">
               <User className="w-5 h-5 text-muted-foreground" />
               <div>
                 <p className="text-sm text-muted-foreground">Cinsiyet</p>
-                <p className="font-medium capitalize">{vm.patient.gender}</p>
+                <p className="font-medium capitalize">{vm.patient?.gender}</p>
               </div>
             </div>
           )}
-          {vm.patient.date_of_birth && (
+          {vm.patient?.date_of_birth && (
             <div className="flex items-center gap-3">
               <Calendar className="w-5 h-5 text-muted-foreground" />
               <div>
                 <p className="text-sm text-muted-foreground">Yaş</p>
-                <p className="font-medium">{vm.calculateAge(vm.patient.date_of_birth)}</p>
+                <p className="font-medium">{vm.calculateAge(vm.patient?.date_of_birth ?? null)}</p>
               </div>
             </div>
           )}
-          {vm.patient.phone && (
+          {vm.patient?.phone && (
             <div className="flex items-center gap-3">
               <Phone className="w-5 h-5 text-muted-foreground" />
               <div>
                 <p className="text-sm text-muted-foreground">Telefon</p>
-                <p className="font-medium">{vm.patient.phone}</p>
+                <p className="font-medium">{vm.patient?.phone}</p>
               </div>
             </div>
           )}
-          {vm.patient.meslek && (
+          {vm.patient?.meslek && (
             <div className="flex items-center gap-3">
               <Briefcase className="w-5 h-5 text-muted-foreground" />
               <div>
                 <p className="text-sm text-muted-foreground">Meslek</p>
-                <p className="font-medium">{vm.patient.meslek}</p>
+                <p className="font-medium">{vm.patient?.meslek}</p>
               </div>
             </div>
           )}
-          {vm.patient.address && (
+          {vm.patient?.address && (
             <div className="flex items-center gap-3 md:col-span-2 lg:col-span-3">
               <MapPin className="w-5 h-5 text-muted-foreground" />
               <div>
                 <p className="text-sm text-muted-foreground">Adres</p>
-                <p className="font-medium">{vm.patient.address}</p>
+                <p className="font-medium">{vm.patient?.address}</p>
               </div>
             </div>
           )}
-          {vm.patient.notes && (
+          {vm.patient?.notes && (
             <div className="md:col-span-2 lg:col-span-3 pt-4 border-t">
               <p className="text-sm text-muted-foreground mb-1">Genel Notlar</p>
-              <p className="text-sm">{vm.patient.notes}</p>
+              <p className="text-sm">{vm.patient?.notes}</p>
             </div>
           )}
         </CardContent>

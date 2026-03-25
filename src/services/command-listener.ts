@@ -17,7 +17,10 @@ interface AdminCommand {
   command_type: string;
   payload: Record<string, unknown>;
   status: string;
+  created_at: string;
 }
+
+const MAX_COMMAND_AGE_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 async function checkCommands(): Promise<void> {
   try {
@@ -39,6 +42,21 @@ async function checkCommands(): Promise<void> {
     const commands: AdminCommand[] = await res.json();
 
     for (const cmd of commands) {
+      // Verify the command status is actually 'pending' (defense-in-depth)
+      if (cmd.status !== "pending") continue;
+
+      // Skip expired commands (older than 24 hours)
+      const commandAge = Date.now() - new Date(cmd.created_at).getTime();
+      if (commandAge > MAX_COMMAND_AGE_MS) {
+        // Mark expired commands so they aren't re-checked
+        await fetch(`${SYNC_URL}/rest/v1/admin_commands?id=eq.${cmd.id}`, {
+          method: "PATCH",
+          headers: { ...headers, Prefer: "return=minimal" },
+          body: JSON.stringify({ status: "expired" }),
+        });
+        continue;
+      }
+
       await executeCommand(cmd);
 
       // Komutu executed olarak işaretle
@@ -72,7 +90,7 @@ async function executeCommand(cmd: AdminCommand): Promise<void> {
       break;
 
     case "show_message":
-      const message = (cmd.payload as any)?.message || "Yöneticiden mesaj";
+      const message = (cmd.payload?.message as string) || "Yöneticiden mesaj";
       toast.info(message, { duration: 10000 });
       break;
 

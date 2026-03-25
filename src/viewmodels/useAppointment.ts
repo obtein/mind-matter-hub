@@ -106,7 +106,7 @@ export function useAppointment(appointmentId: string, patientId: string) {
       setNotes(appointmentData?.notes || "");
       setStatus(appointmentData?.status || "scheduled");
       setError(null);
-    } catch (error: any) {
+    } catch (error: unknown) {
       setError(handleError(error, "Veriler yüklenemedi"));
       toast.error("Veriler yüklenemedi");
     } finally {
@@ -166,8 +166,8 @@ export function useAppointment(appointmentId: string, patientId: string) {
     try {
       await appointmentRepo.update(appointmentId, { notes, status });
       toast.success("Kaydedildi");
-    } catch (error: any) {
-      toast.error("Kaydedilemedi");
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : "Kaydedilemedi");
     } finally {
       setSaving(false);
     }
@@ -194,8 +194,8 @@ export function useAppointment(appointmentId: string, patientId: string) {
         setIsMedicationDialogOpen(false);
         setMedicationForm({ ...EMPTY_MEDICATION_FORM });
         fetchData();
-      } catch (error: any) {
-        toast.error("Tanı eklenemedi");
+      } catch (error: unknown) {
+        toast.error(error instanceof Error ? error.message : "Tanı eklenemedi");
       }
     },
     [appointmentId, medicationForm, medicationRepo, fetchData]
@@ -264,8 +264,8 @@ export function useAppointment(appointmentId: string, patientId: string) {
         toast.success("Yeni randevu oluşturuldu");
         setIsNewAppointmentDialogOpen(false);
         setNewAppointmentForm({ ...DEFAULT_NEW_APPOINTMENT_FORM });
-      } catch (error: any) {
-        toast.error("Randevu oluşturulamadı");
+      } catch (error: unknown) {
+        toast.error(error instanceof Error ? error.message : "Randevu oluşturulamadı");
       }
     },
     [auth, newAppointmentForm, patientId, db, appointmentRepo, reminderRepo]

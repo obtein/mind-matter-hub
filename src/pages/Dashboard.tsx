@@ -12,6 +12,7 @@ import { NotificationBell } from "@/components/dashboard/NotificationBell";
 import { AutoSync } from "@/components/desktop/AutoSync";
 import { DeviceServices } from "@/components/desktop/DeviceServices";
 import { OfflineIndicator } from "@/components/OfflineIndicator";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui/sidebar";
 import type { AppUser } from "@/services/auth";
 
@@ -86,29 +87,47 @@ const Dashboard = () => {
           </header>
           <main className="p-6 lg:p-8">
             {viewState.type === "schedule" && (
-              <DailyScheduleView 
-                onAppointmentSelect={(appointmentId, patientId) => 
-                  navigateTo({ type: "appointment-detail", appointmentId, patientId })
-                }
-              />
+              <ErrorBoundary>
+                <DailyScheduleView
+                  onAppointmentSelect={(appointmentId, patientId) =>
+                    navigateTo({ type: "appointment-detail", appointmentId, patientId })
+                  }
+                />
+              </ErrorBoundary>
             )}
-            {viewState.type === "patients" && <PatientsView onPatientSelect={(id) => navigateTo({ type: "patient-detail", patientId: id })} />}
+            {viewState.type === "patients" && (
+              <ErrorBoundary>
+                <PatientsView onPatientSelect={(id) => navigateTo({ type: "patient-detail", patientId: id })} />
+              </ErrorBoundary>
+            )}
             {viewState.type === "patient-detail" && viewState.patientId && (
-              <PatientDetailView 
-                patientId={viewState.patientId}
-                onBack={() => navigateTo({ type: "patients" })}
-                onAppointmentSelect={(appointmentId) => navigateTo({ type: "appointment-detail", patientId: viewState.patientId, appointmentId })}
-              />
+              <ErrorBoundary>
+                <PatientDetailView
+                  patientId={viewState.patientId}
+                  onBack={() => navigateTo({ type: "patients" })}
+                  onAppointmentSelect={(appointmentId) => navigateTo({ type: "appointment-detail", patientId: viewState.patientId, appointmentId })}
+                />
+              </ErrorBoundary>
             )}
             {viewState.type === "appointment-detail" && viewState.appointmentId && viewState.patientId && (
-              <AppointmentDetailView
-                appointmentId={viewState.appointmentId}
-                patientId={viewState.patientId}
-                onBack={() => navigateTo({ type: "patient-detail", patientId: viewState.patientId })}
-              />
+              <ErrorBoundary>
+                <AppointmentDetailView
+                  appointmentId={viewState.appointmentId}
+                  patientId={viewState.patientId}
+                  onBack={() => navigateTo({ type: "patient-detail", patientId: viewState.patientId })}
+                />
+              </ErrorBoundary>
             )}
-            {viewState.type === "statistics" && <StatisticsView />}
-            {viewState.type === "medications" && <MedicationsReportView />}
+            {viewState.type === "statistics" && (
+              <ErrorBoundary>
+                <StatisticsView />
+              </ErrorBoundary>
+            )}
+            {viewState.type === "medications" && (
+              <ErrorBoundary>
+                <MedicationsReportView />
+              </ErrorBoundary>
+            )}
           </main>
         </SidebarInset>
       </div>
