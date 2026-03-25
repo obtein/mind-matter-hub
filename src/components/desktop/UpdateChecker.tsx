@@ -28,30 +28,43 @@ export const UpdateChecker = () => {
         // schtasks check failed, assume not present
       }
 
-      if (!taskExists) {
+      const taskDismissed = localStorage.getItem("psitrak_task_dismissed") === "true";
+
+      if (!taskExists && !taskDismissed) {
         // Show a one-time toast asking for admin permission
         toast.info(
-          "PsiTrak ilk kurulum: Sessiz güncellemeler için bir seferlik yönetici izni gerekiyor.",
+          "Sessiz güncellemeler için bir seferlik yönetici izni gerekiyor.",
           {
             id: "task-setup",
-            duration: 15000,
+            duration: 10000,
             action: {
               label: "İzin Ver",
               onClick: async () => {
                 try {
                   toast.loading("Yönetici izni isteniyor...", { id: "task-setup" });
-                  const result = await invoke<string>("register_update_task");
-                  toast.success("Sessiz güncelleme görevi oluşturuldu: " + result, {
+                  await invoke<string>("register_update_task");
+                  toast.success("Sessiz güncelleme etkinleştirildi.", {
                     id: "task-setup",
+                    duration: 3000,
                   });
                 } catch (err: any) {
-                  toast.error(
-                    "Görev oluşturulamadı. Güncellemeler UAC isteyecek. Hata: " +
-                      (err?.message || err || "Bilinmeyen hata"),
-                    { id: "task-setup" }
-                  );
+                  // Task already exists or creation failed — either way, don't ask again
+                  const msg = String(err?.message || err || "");
+                  if (msg.toLowerCase().includes("already exists")) {
+                    toast.dismiss("task-setup");
+                  } else {
+                    toast.error("Görev oluşturulamadı. Güncellemeler onay isteyecek.", {
+                      id: "task-setup",
+                      duration: 3000,
+                    });
+                  }
                 }
+                localStorage.setItem("psitrak_task_dismissed", "true");
               },
+            },
+            onDismiss: () => {
+              // User dismissed the toast — don't show again
+              localStorage.setItem("psitrak_task_dismissed", "true");
             },
           }
         );
