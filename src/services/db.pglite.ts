@@ -1,4 +1,12 @@
 import { getPGlite } from "./pglite/init";
+
+/** PGlite returns Date objects for timestamp columns. Ensure they are ISO strings. */
+function toISOString(val: unknown): string {
+  if (val instanceof Date) return val.toISOString();
+  if (typeof val === "string") return val;
+  return String(val ?? "");
+}
+
 import type {
   DbService,
   Patient,
@@ -95,7 +103,7 @@ export class PGliteDbService implements DbService {
       "SELECT appointment_date FROM appointments WHERE patient_id = $1 ORDER BY appointment_date DESC LIMIT 1",
       [patientId]
     );
-    return rows[0]?.appointment_date || null;
+    return rows[0]?.appointment_date ? toISOString(rows[0].appointment_date) : null;
   }
 
   async getPatientsForStats(): Promise<Pick<Patient, "id" | "gender" | "date_of_birth">[]> {
@@ -122,7 +130,7 @@ export class PGliteDbService implements DbService {
     return rows.map((r) => ({
       id: r.id,
       patient_id: r.patient_id,
-      appointment_date: r.appointment_date,
+      appointment_date: toISOString(r.appointment_date),
       duration_minutes: r.duration_minutes,
       notes: r.notes,
       status: r.status,
@@ -136,7 +144,7 @@ export class PGliteDbService implements DbService {
       "SELECT * FROM appointments WHERE patient_id = $1 ORDER BY appointment_date DESC",
       [patientId]
     );
-    return rows;
+    return rows.map((r) => ({ ...r, appointment_date: toISOString(r.appointment_date), created_at: toISOString(r.created_at) }));
   }
 
   async getAppointment(id: string): Promise<Appointment | null> {
@@ -145,7 +153,8 @@ export class PGliteDbService implements DbService {
       "SELECT * FROM appointments WHERE id = $1",
       [id]
     );
-    return rows[0] || null;
+    const r = rows[0];
+    return r ? { ...r, appointment_date: toISOString(r.appointment_date), created_at: toISOString(r.created_at) } : null;
   }
 
   async createAppointment(data: AppointmentInsert): Promise<Appointment> {
@@ -156,7 +165,8 @@ export class PGliteDbService implements DbService {
        RETURNING *`,
       [data.doctor_id, data.patient_id, data.appointment_date, data.duration_minutes ?? 60, data.notes ?? null]
     );
-    return rows[0];
+    const r = rows[0];
+    return { ...r, appointment_date: toISOString(r.appointment_date), created_at: toISOString(r.created_at) };
   }
 
   async updateAppointment(id: string, data: Partial<Pick<Appointment, "notes" | "status">>): Promise<void> {
@@ -187,7 +197,7 @@ export class PGliteDbService implements DbService {
       "SELECT appointment_date FROM appointments WHERE appointment_date >= $1 AND appointment_date <= $2",
       [start, end]
     );
-    return rows.map((r) => r.appointment_date);
+    return rows.map((r) => toISOString(r.appointment_date));
   }
 
   async getAppointmentsForStats(): Promise<Pick<Appointment, "id" | "appointment_date" | "status">[]> {
@@ -195,7 +205,7 @@ export class PGliteDbService implements DbService {
     const { rows } = await db.query<Pick<Appointment, "id" | "appointment_date" | "status">>(
       "SELECT id, appointment_date, status FROM appointments"
     );
-    return rows;
+    return rows.map((r) => ({ ...r, appointment_date: toISOString(r.appointment_date) }));
   }
 
   async getAppointmentsForConflictCheck(
@@ -207,7 +217,7 @@ export class PGliteDbService implements DbService {
     let sql = `
       SELECT a.id, a.patient_id, a.appointment_date, a.duration_minutes, a.notes, a.status,
              p.full_name as patient_full_name
-      FROM appointments a
+      From appointments a
       LEFT JOIN patients p ON a.patient_id = p.id
       WHERE a.appointment_date >= $1 AND a.appointment_date <= $2 AND a.status != 'cancelled'
     `;
@@ -222,7 +232,7 @@ export class PGliteDbService implements DbService {
     return rows.map((r) => ({
       id: r.id,
       patient_id: r.patient_id,
-      appointment_date: r.appointment_date,
+      appointment_date: toISOString(r.appointment_date),
       duration_minutes: r.duration_minutes,
       notes: r.notes,
       status: r.status,
@@ -242,7 +252,7 @@ export class PGliteDbService implements DbService {
     );
     return rows.map((r) => ({
       id: r.id,
-      appointment_date: r.appointment_date,
+      appointment_date: toISOString(r.appointment_date),
       patients: r.patient_full_name ? { full_name: r.patient_full_name } : null,
     }));
   }
@@ -281,7 +291,7 @@ export class PGliteDbService implements DbService {
       medication_name: r.medication_name,
       dosage: r.dosage,
       instructions: r.instructions,
-      appointment_date: r.appointment_date || "",
+      appointment_date: toISOString(r.appointment_date) || "",
     }));
   }
 
@@ -309,10 +319,10 @@ export class PGliteDbService implements DbService {
       medication_name: r.medication_name,
       dosage: r.dosage,
       instructions: r.instructions,
-      created_at: r.created_at,
+      created_at: toISOString(r.created_at),
       appointment: r.appointment_date
         ? {
-            appointment_date: r.appointment_date,
+            appointment_date: toISOString(r.appointment_date),
             patient: r.patient_id ? { id: r.patient_id, full_name: r.patient_full_name! } : null,
           }
         : null,
