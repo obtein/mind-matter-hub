@@ -47,13 +47,15 @@ const Login = () => {
         console.warn("Profil oluşturma atlandı:", profileErr);
       }
 
-      // Hasta yoksa Supabase'den çek
+      // Hasta yoksa veya pending sync varsa Supabase'den çek
       try {
         const { rows } = await db.query<{ count: number }>("SELECT COUNT(*)::int as count FROM patients");
-        if ((rows[0]?.count ?? 0) === 0) {
+        const hasPendingSync = localStorage.getItem("psitrak_pending_sync") === "true";
+        if ((rows[0]?.count ?? 0) === 0 || hasPendingSync) {
           toast.info("Veriler senkronize ediliyor...");
           const result = await syncFromSupabase();
           if (result.success) {
+            localStorage.removeItem("psitrak_pending_sync");
             toast.success(result.message);
           }
         }
@@ -69,7 +71,14 @@ const Login = () => {
   useEffect(() => {
     auth.getSession().then(async ({ user }) => {
       if (user) {
-        try { await ensureLocalData(); } catch { /* devam et */ }
+        try {
+          await ensureLocalData();
+        } catch (err) {
+          remoteLog.error("Auto-login ensureLocalData failed", { error: String(err) });
+          toast.error("Veri hazırlama sırasında hata oluştu, yeniden giriş yapın.");
+          setCheckingSession(false);
+          return;
+        }
         navigate("/dashboard", { replace: true });
       } else {
         setCheckingSession(false);
@@ -98,7 +107,13 @@ const Login = () => {
       }
 
       toast.success("Giriş başarılı!");
-      try { await ensureLocalData(); } catch { /* devam et */ }
+      try {
+        await ensureLocalData();
+      } catch (err) {
+        remoteLog.error("Login ensureLocalData failed", { error: String(err) });
+        toast.error("Veri hazırlama hatası. Tekrar deneyin.");
+        return;
+      }
       navigate("/dashboard");
     } catch {
       toast.error("Giriş yapılamadı. Lütfen tekrar deneyin.");

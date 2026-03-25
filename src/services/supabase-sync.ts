@@ -112,7 +112,12 @@ export async function syncFromSupabase(
         idCol: "id",
         ownerCol: "doctor_id",
         insertSql: `INSERT INTO patients (id,doctor_id,full_name,phone,date_of_birth,notes,gender,address,meslek,created_at,updated_at)
-                     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) ON CONFLICT(id) DO NOTHING`,
+                     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+                     ON CONFLICT(id) DO UPDATE SET
+                       full_name=EXCLUDED.full_name, phone=EXCLUDED.phone, date_of_birth=EXCLUDED.date_of_birth,
+                       notes=EXCLUDED.notes, gender=EXCLUDED.gender, address=EXCLUDED.address, meslek=EXCLUDED.meslek,
+                       updated_at=EXCLUDED.updated_at
+                     WHERE patients.updated_at < EXCLUDED.updated_at`,
         insertParams: (r: any) => [r.id, userId, r.full_name, r.phone, r.date_of_birth, r.notes, r.gender, r.address, r.meslek ?? null, r.created_at, r.updated_at],
       },
       {
@@ -120,7 +125,11 @@ export async function syncFromSupabase(
         idCol: "id",
         ownerCol: "doctor_id",
         insertSql: `INSERT INTO appointments (id,doctor_id,patient_id,appointment_date,duration_minutes,status,notes,created_at,updated_at)
-                     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT(id) DO NOTHING`,
+                     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+                     ON CONFLICT(id) DO UPDATE SET
+                       appointment_date=EXCLUDED.appointment_date, duration_minutes=EXCLUDED.duration_minutes,
+                       status=EXCLUDED.status, notes=EXCLUDED.notes, updated_at=EXCLUDED.updated_at
+                     WHERE appointments.updated_at < EXCLUDED.updated_at`,
         insertParams: (r: any) => [r.id, userId, r.patient_id, r.appointment_date, r.duration_minutes, r.status, r.notes, r.created_at, r.updated_at],
       },
       {
@@ -128,7 +137,10 @@ export async function syncFromSupabase(
         idCol: "id",
         ownerCol: "doctor_id",
         insertSql: `INSERT INTO patient_notes (id,patient_id,doctor_id,title,content,created_at,updated_at)
-                     VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT(id) DO NOTHING`,
+                     VALUES ($1,$2,$3,$4,$5,$6,$7)
+                     ON CONFLICT(id) DO UPDATE SET
+                       title=EXCLUDED.title, content=EXCLUDED.content, updated_at=EXCLUDED.updated_at
+                     WHERE patient_notes.updated_at < EXCLUDED.updated_at`,
         insertParams: (r: any) => [r.id, r.patient_id, userId, r.title, r.content, r.created_at, r.updated_at],
       },
       {
