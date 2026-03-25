@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { ServiceProvider } from "@/services/ServiceContext";
 import { UpdateChecker } from "@/components/desktop/UpdateChecker";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import "@/services/remote-logger"; // Global error logging to Supabase
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
@@ -13,6 +14,7 @@ import NotFound from "./pages/NotFound";
 const queryClient = new QueryClient();
 
 const App = () => (
+  <ErrorBoundary>
   <ServiceProvider>
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
@@ -30,6 +32,7 @@ const App = () => (
       </TooltipProvider>
     </QueryClientProvider>
   </ServiceProvider>
+  </ErrorBoundary>
 );
 
 export default App;

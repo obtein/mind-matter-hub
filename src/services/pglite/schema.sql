@@ -135,6 +135,12 @@ CREATE INDEX IF NOT EXISTS idx_notifications_created_at ON public.notifications(
 CREATE INDEX IF NOT EXISTS idx_appointment_reminders_appointment_id ON public.appointment_reminders(appointment_id);
 CREATE INDEX IF NOT EXISTS idx_appointment_reminders_reminder_time ON public.appointment_reminders(reminder_time);
 CREATE INDEX IF NOT EXISTS idx_appointment_reminders_is_sent ON public.appointment_reminders(is_sent);
+CREATE INDEX IF NOT EXISTS idx_patients_doctor_id ON public.patients(doctor_id);
+CREATE INDEX IF NOT EXISTS idx_patients_full_name ON public.patients(full_name);
+CREATE INDEX IF NOT EXISTS idx_appointments_doctor_id ON public.appointments(doctor_id);
+CREATE INDEX IF NOT EXISTS idx_appointments_patient_id ON public.appointments(patient_id);
+CREATE INDEX IF NOT EXISTS idx_appointments_date ON public.appointments(appointment_date DESC);
+CREATE INDEX IF NOT EXISTS idx_patient_notes_patient_id ON public.patient_notes(patient_id);
 
 -- =============================================
 -- Triggers (updated_at auto-update)

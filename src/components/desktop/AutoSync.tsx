@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { IS_TAURI } from "@/lib/platform";
+import { remoteLog } from "@/services/remote-logger";
 
 export const AutoSync = () => {
   useEffect(() => {
@@ -20,12 +21,33 @@ export const AutoSync = () => {
             const { hasSyncCredentials, syncToSupabase } = await import("@/services/supabase-sync");
 
             if (await hasSyncCredentials()) {
-              const syncPromise = syncToSupabase().catch(() => {});
-              const timeoutPromise = new Promise((resolve) => setTimeout(resolve, 10000));
-              await Promise.race([syncPromise, timeoutPromise]);
+              const controller = new AbortController();
+              const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+              try {
+                const result = await Promise.race([
+                  syncToSupabase(),
+                  new Promise<{ success: false; message: string }>((_, reject) => {
+                    controller.signal.addEventListener("abort", () =>
+                      reject(new Error("Sync timeout"))
+                    );
+                  }),
+                ]);
+
+                if (!result.success) {
+                  // Sync başarısız — sonraki açılışta tekrar denesin
+                  localStorage.setItem("psitrak_pending_sync", "true");
+                  remoteLog.warn("AutoSync failed on close", { message: result.message });
+                }
+              } catch (err) {
+                localStorage.setItem("psitrak_pending_sync", "true");
+                remoteLog.warn("AutoSync timeout or error on close", { error: String(err) });
+              } finally {
+                clearTimeout(timeoutId);
+              }
             }
           } catch {
-            // Sync hatası kapanmayı engellememeli
+            // Sync modülü yüklenemedi — kapanmayı engelleme
           }
 
           // Her durumda uygulamayı kapat
