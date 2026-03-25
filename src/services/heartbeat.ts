@@ -16,7 +16,17 @@ async function sendHeartbeat(): Promise<void> {
     const user = await auth.getUser();
     if (!user) return;
 
-    await fetch(`${SYNC_URL}/rest/v1/device_heartbeats`, {
+    const payload = {
+      user_id: String(user.id),
+      user_email: user.email,
+      app_version: typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "unknown",
+      platform: "__TAURI__" in window ? "desktop" : "web",
+      os_info: navigator.userAgent.substring(0, 200),
+      last_seen_at: new Date().toISOString(),
+    };
+
+    // Upsert: user_id unique constraint üzerinden merge
+    const res = await fetch(`${SYNC_URL}/rest/v1/device_heartbeats?on_conflict=user_id`, {
       method: "POST",
       headers: {
         apikey: SYNC_KEY,
@@ -24,17 +34,13 @@ async function sendHeartbeat(): Promise<void> {
         "Content-Type": "application/json",
         Prefer: "resolution=merge-duplicates",
       },
-      body: JSON.stringify({
-        user_id: user.id,
-        // NOTE: user_email is sent intentionally — it only goes to our own Supabase
-        // for the admin panel to identify devices. Not sent to any third party.
-        user_email: user.email,
-        app_version: typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "unknown",
-        platform: "__TAURI__" in window ? "desktop" : "web",
-        os_info: navigator.userAgent.substring(0, 200),
-        last_seen_at: new Date().toISOString(),
-      }),
+      body: JSON.stringify(payload),
     });
+
+    if (!res.ok) {
+      const errText = await res.text().catch(() => "");
+      console.warn("Heartbeat response:", res.status, errText);
+    }
   } catch (err) {
     console.warn("Heartbeat failed:", err);
   }
