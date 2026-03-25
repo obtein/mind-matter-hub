@@ -87,7 +87,7 @@ export const DashboardSidebar = ({ viewState, setViewState, user }: DashboardSid
           <img src={psiTrakLogo} alt="PsiTrak Logo" className="w-10 h-10" />
           <div>
             <h1 className="font-display font-bold text-lg text-sidebar-foreground">PsiTrak</h1>
-            <p className="text-xs text-sidebar-foreground/60">Hasta Takip Sistemi</p>
+            <p className="text-xs text-sidebar-foreground/60">Hasta Takip Sistemi — v{__APP_VERSION__}</p>
           </div>
         </div>
       </SidebarHeader>
