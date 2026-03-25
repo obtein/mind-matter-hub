@@ -11,6 +11,7 @@ import { MedicationsReportView } from "@/components/dashboard/MedicationsReportV
 import { NotificationBell } from "@/components/dashboard/NotificationBell";
 import { AutoSync } from "@/components/desktop/AutoSync";
 import { DeviceServices } from "@/components/desktop/DeviceServices";
+import { OfflineIndicator } from "@/components/OfflineIndicator";
 import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui/sidebar";
 import type { AppUser } from "@/services/auth";
 
@@ -70,7 +71,8 @@ const Dashboard = () => {
       <AutoSync />
       <DeviceServices />
       <div className="min-h-screen flex w-full bg-background">
-        <DashboardSidebar 
+        <OfflineIndicator />
+        <DashboardSidebar
           viewState={viewState}
           setViewState={setViewState}
           user={user}

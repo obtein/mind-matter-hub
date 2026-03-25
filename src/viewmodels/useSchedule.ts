@@ -23,6 +23,7 @@ export function useSchedule() {
 
   const [appointments, setAppointments] = useState<ScheduleAppointment[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
 
   const fetchAppointments = useCallback(async () => {
@@ -39,7 +40,9 @@ export function useSchedule() {
         endOfDay.toISOString()
       );
       setAppointments(data || []);
+      setError(null);
     } catch (error: unknown) {
+      setError(handleError(error, "Randevular yüklenemedi"));
       toast.error(handleError(error, "Randevular yüklenemedi"));
     } finally {
       setLoading(false);
@@ -87,6 +90,7 @@ export function useSchedule() {
     // State
     appointments,
     loading,
+    error,
     selectedDate,
     isToday,
 
