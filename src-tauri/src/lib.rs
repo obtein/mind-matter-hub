@@ -158,6 +158,9 @@ pub fn run() {
       use tauri_plugin_autostart::ManagerExt;
       let _ = app.autolaunch().enable();
 
+      // DevTools available via right-click → Inspect in release builds
+      // (enabled by "devtools" feature in Cargo.toml)
+
       if cfg!(debug_assertions) {
         app.handle().plugin(
           tauri_plugin_log::Builder::default()
