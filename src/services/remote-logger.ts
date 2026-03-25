@@ -45,6 +45,11 @@ async function sendLog(entry: LogEntry): Promise<void> {
 
 function getUserEmail(): string | undefined {
   try {
+    // Lokal auth session'dan email al
+    const sessionRaw = localStorage.getItem("psitrak_local_session");
+    if (sessionRaw) return sessionRaw; // userId stored, try email from DB
+
+    // Fallback: Supabase auth token
     const raw = localStorage.getItem("sb-vhdhwnvfomwzauvqozxo-auth-token");
     if (raw) {
       const parsed = JSON.parse(raw);
