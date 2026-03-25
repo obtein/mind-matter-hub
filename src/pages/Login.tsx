@@ -8,8 +8,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { toast } from "sonner";
 import { Heart, Shield, Loader2 } from "lucide-react";
 import psiTrakLogo from "/favicon.png";
-import { syncFromSupabase } from "@/services/supabase-sync";
-import { initUserDb } from "@/services/pglite/init";
 import { remoteLog } from "@/services/remote-logger";
 
 const Login = () => {
@@ -19,66 +17,12 @@ const Login = () => {
   const [checkingSession, setCheckingSession] = useState(true);
   const [loginData, setLoginData] = useState({ email: "", password: "" });
 
-  // İlk girişte lokal DB'de profil ve veri yoksa hazırla
-  const ensureLocalData = async () => {
-    try {
-      const user = await auth.getUser();
-      if (!user) return;
-
-      // Kullanıcıya özel DB başlat
-      const db = await initUserDb(user.id);
-
-      // Lokal profil yoksa oluştur
-      try {
-        const { rows: profiles } = await db.query<{ user_id: string }>(
-          "SELECT user_id FROM profiles WHERE user_id = $1", [user.id]
-        );
-        if (profiles.length === 0) {
-          await db.query(
-            "INSERT INTO profiles (user_id, full_name) VALUES ($1, $2) ON CONFLICT (user_id) DO NOTHING",
-            [user.id, user.user_metadata?.full_name || "Doktor"]
-          );
-          await db.query(
-            "INSERT INTO user_roles (user_id, role) VALUES ($1, $2) ON CONFLICT (user_id, role) DO NOTHING",
-            [user.id, "doctor"]
-          );
-        }
-      } catch (profileErr) {
-        console.warn("Profil oluşturma atlandı:", profileErr);
-      }
-
-      // Hasta yoksa veya pending sync varsa Supabase'den çek
-      try {
-        const { rows } = await db.query<{ count: number }>("SELECT COUNT(*)::int as count FROM patients");
-        const hasPendingSync = localStorage.getItem("psitrak_pending_sync") === "true";
-        if ((rows[0]?.count ?? 0) === 0 || hasPendingSync) {
-          toast.info("Veriler senkronize ediliyor...");
-          const result = await syncFromSupabase();
-          if (result.success) {
-            localStorage.removeItem("psitrak_pending_sync");
-            toast.success(result.message);
-          }
-        }
-      } catch (syncErr) {
-        console.warn("Sync atlandı:", syncErr);
-      }
-    } catch (err) {
-      remoteLog.error("ensureLocalData crash", { error: String(err) });
-    }
-  };
-
   // Auto login: mevcut oturum varsa direkt dashboard'a yönlendir
+  // DB init ve sync Dashboard mount olduktan sonra arka planda yapılır
   useEffect(() => {
-    auth.getSession().then(async ({ user }) => {
+    auth.getSession().then(({ user }) => {
       if (user) {
-        try {
-          await ensureLocalData();
-        } catch (err) {
-          remoteLog.error("Auto-login ensureLocalData failed", { error: String(err) });
-          toast.error("Veri hazırlama sırasında hata oluştu, yeniden giriş yapın.");
-          setCheckingSession(false);
-          return;
-        }
+        // Hemen dashboard'a geç — ağır işler orada arka planda yapılacak
         navigate("/dashboard", { replace: true });
       } else {
         setCheckingSession(false);
@@ -88,8 +32,9 @@ const Login = () => {
 
   if (checkingSession) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      <div className="min-h-screen flex flex-col items-center justify-center gap-4">
+        <img src={psiTrakLogo} alt="PsiTrak" className="w-16 h-16 animate-pulse" />
+        <Loader2 className="w-6 h-6 animate-spin text-primary" />
       </div>
     );
   }
@@ -107,13 +52,7 @@ const Login = () => {
       }
 
       toast.success("Giriş başarılı!");
-      try {
-        await ensureLocalData();
-      } catch (err) {
-        remoteLog.error("Login ensureLocalData failed", { error: String(err) });
-        toast.error("Veri hazırlama hatası. Tekrar deneyin.");
-        return;
-      }
+      // Hemen dashboard'a geç — DB init arka planda yapılacak
       navigate("/dashboard");
     } catch {
       toast.error("Giriş yapılamadı. Lütfen tekrar deneyin.");
@@ -135,7 +74,7 @@ const Login = () => {
           <p className="text-xl text-center max-w-md opacity-90 mb-12">
             Psikiyatrist Hasta Takip Sistemi
           </p>
-          
+
           <div className="space-y-6 max-w-sm">
             <div className="flex items-start gap-4">
               <div className="w-10 h-10 rounded-full bg-primary-foreground/20 flex items-center justify-center flex-shrink-0">
@@ -146,7 +85,7 @@ const Login = () => {
                 <p className="text-sm opacity-80">Hastalarınızı kolayca yönetin ve notlarınızı kaydedin</p>
               </div>
             </div>
-            
+
             <div className="flex items-start gap-4">
               <div className="w-10 h-10 rounded-full bg-primary-foreground/20 flex items-center justify-center flex-shrink-0">
                 <Shield className="w-5 h-5" />
