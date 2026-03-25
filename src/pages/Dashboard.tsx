@@ -11,6 +11,7 @@ import { MedicationsReportView } from "@/components/dashboard/MedicationsReportV
 import { NotificationBell } from "@/components/dashboard/NotificationBell";
 import { AutoSync } from "@/components/desktop/AutoSync";
 import { DeviceServices } from "@/components/desktop/DeviceServices";
+import { setHeartbeatUser } from "@/services/heartbeat";
 import { OfflineIndicator } from "@/components/OfflineIndicator";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui/sidebar";
@@ -64,6 +65,7 @@ const Dashboard = () => {
         navigate("/");
       } else {
         setUser(u);
+        setHeartbeatUser({ id: u.id, email: u.email || "" });
       }
     });
 
