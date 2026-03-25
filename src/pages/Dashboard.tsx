@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/services/ServiceContext";
 import { DashboardSidebar } from "@/components/dashboard/DashboardSidebar";
@@ -14,6 +14,13 @@ import { DeviceServices } from "@/components/desktop/DeviceServices";
 import { OfflineIndicator } from "@/components/OfflineIndicator";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui/sidebar";
+import { initUserDb } from "@/services/pglite/init";
+import { syncFromSupabase } from "@/services/supabase-sync";
+import { remoteLog } from "@/services/remote-logger";
+import { safeGetItem, safeRemoveItem } from "@/lib/storage";
+import { toast } from "sonner";
+import { Loader2, Database, RefreshCw, CheckCircle } from "lucide-react";
+import psiTrakLogo from "/favicon.png";
 import type { AppUser } from "@/services/auth";
 
 export type ViewType = "schedule" | "patients" | "patient-detail" | "appointment-detail" | "statistics" | "medications";
@@ -24,48 +31,145 @@ export interface ViewState {
   appointmentId?: string;
 }
 
+type InitPhase = "auth" | "database" | "sync" | "ready";
+
+const PHASE_LABELS: Record<InitPhase, string> = {
+  auth: "Oturum kontrol ediliyor...",
+  database: "Veritabanı hazırlanıyor...",
+  sync: "Veriler senkronize ediliyor...",
+  ready: "Hazır!",
+};
+
 const Dashboard = () => {
   const navigate = useNavigate();
   const auth = useAuth();
   const [user, setUser] = useState<AppUser | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [initPhase, setInitPhase] = useState<InitPhase>("auth");
+  const [dbReady, setDbReady] = useState(false);
   const [viewState, setViewState] = useState<ViewState>({ type: "schedule" });
+  const initStarted = useRef(false);
 
+  // Phase 1: Auth check
   useEffect(() => {
-    const sub = auth.onAuthStateChange((event, user) => {
-      if (event === "SIGNED_OUT" || !user) {
+    const sub = auth.onAuthStateChange((event, u) => {
+      if (event === "SIGNED_OUT" || !u) {
         navigate("/");
       } else {
-        setUser(user);
+        setUser(u);
       }
-      setLoading(false);
     });
 
-    auth.getSession().then(({ user }) => {
-      if (!user) {
+    auth.getSession().then(({ user: u }) => {
+      if (!u) {
         navigate("/");
       } else {
-        setUser(user);
+        setUser(u);
       }
-      setLoading(false);
     });
 
     return () => sub.unsubscribe();
   }, [navigate]);
 
+  // Phase 2-3: DB init + sync (runs AFTER user is set, non-blocking)
+  useEffect(() => {
+    if (!user || initStarted.current) return;
+    initStarted.current = true;
+
+    const initBackground = async () => {
+      // Phase 2: Database init
+      setInitPhase("database");
+      try {
+        const db = await initUserDb(user.id);
+
+        // Ensure profile exists
+        try {
+          const { rows: profiles } = await db.query<{ user_id: string }>(
+            "SELECT user_id FROM profiles WHERE user_id = $1", [user.id]
+          );
+          if (profiles.length === 0) {
+            await db.query(
+              "INSERT INTO profiles (user_id, full_name) VALUES ($1, $2) ON CONFLICT (user_id) DO NOTHING",
+              [user.id, user.user_metadata?.full_name || "Doktor"]
+            );
+            await db.query(
+              "INSERT INTO user_roles (user_id, role) VALUES ($1, $2) ON CONFLICT (user_id, role) DO NOTHING",
+              [user.id, "doctor"]
+            );
+          }
+        } catch (profileErr) {
+          console.warn("Profil oluşturma atlandı:", profileErr);
+        }
+
+        // DB ready — show dashboard UI immediately
+        setDbReady(true);
+
+        // Phase 3: Sync in background (don't block UI)
+        setInitPhase("sync");
+        try {
+          const { rows } = await db.query<{ count: number }>("SELECT COUNT(*)::int as count FROM patients");
+          const hasPendingSync = safeGetItem("psitrak_pending_sync") === "true";
+          if ((rows[0]?.count ?? 0) === 0 || hasPendingSync) {
+            const result = await syncFromSupabase();
+            if (result.success) {
+              safeRemoveItem("psitrak_pending_sync");
+              toast.success(result.message);
+            }
+          }
+        } catch (syncErr) {
+          console.warn("Sync atlandı:", syncErr);
+        }
+
+        setInitPhase("ready");
+      } catch (err) {
+        remoteLog.error("Dashboard init failed", { error: String(err) });
+        toast.error("Veritabanı başlatılamadı. Uygulamayı yeniden başlatın.");
+        // Still show UI even if init fails
+        setDbReady(true);
+        setInitPhase("ready");
+      }
+    };
+
+    initBackground();
+  }, [user]);
+
   const navigateTo = (newState: ViewState) => {
     setViewState(newState);
   };
 
-  if (loading) {
+  // Show splash screen with progress while waiting
+  if (!user || !dbReady) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="animate-pulse text-muted-foreground">Yükleniyor...</div>
+      <div className="min-h-screen flex flex-col items-center justify-center bg-background gap-6">
+        <img src={psiTrakLogo} alt="PsiTrak" className="w-20 h-20" />
+        <h1 className="text-2xl font-display font-bold text-foreground">PsiTrak</h1>
+
+        <div className="flex flex-col items-center gap-3 min-w-[250px]">
+          {/* Progress steps */}
+          <div className="flex flex-col gap-2 text-sm w-full">
+            <StepIndicator
+              label="Oturum"
+              done={initPhase !== "auth"}
+              active={initPhase === "auth"}
+            />
+            <StepIndicator
+              label="Veritabanı"
+              done={initPhase === "sync" || initPhase === "ready"}
+              active={initPhase === "database"}
+            />
+            <StepIndicator
+              label="Senkronizasyon"
+              done={initPhase === "ready"}
+              active={initPhase === "sync"}
+            />
+          </div>
+
+          <p className="text-muted-foreground text-xs mt-2 animate-pulse">
+            {PHASE_LABELS[initPhase]}
+          </p>
+        </div>
       </div>
     );
   }
-
-  if (!user) return null;
 
   return (
     <SidebarProvider>
@@ -134,5 +238,23 @@ const Dashboard = () => {
     </SidebarProvider>
   );
 };
+
+/** Small step indicator for splash screen */
+function StepIndicator({ label, done, active }: { label: string; done: boolean; active: boolean }) {
+  return (
+    <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg transition-colors ${
+      active ? "bg-primary/10 text-primary" : done ? "text-green-500" : "text-muted-foreground/50"
+    }`}>
+      {done ? (
+        <CheckCircle className="w-4 h-4" />
+      ) : active ? (
+        <Loader2 className="w-4 h-4 animate-spin" />
+      ) : (
+        <div className="w-4 h-4 rounded-full border border-current" />
+      )}
+      <span className="font-medium">{label}</span>
+    </div>
+  );
+}
 
 export default Dashboard;
