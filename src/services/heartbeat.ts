@@ -2,7 +2,6 @@
  * Heartbeat servisi — Her 2 dakikada bir Supabase'e cihaz durumu gönderir.
  * Master (admin) uygulaması bu verileri okuyarak slave'leri izler.
  */
-import { LocalAuthService } from "@/services/auth.local";
 
 const HEARTBEAT_INTERVAL = 2 * 60 * 1000; // 2 dakika
 let intervalId: ReturnType<typeof setInterval> | null = null;
@@ -10,15 +9,24 @@ let intervalId: ReturnType<typeof setInterval> | null = null;
 const SYNC_URL = import.meta.env.VITE_SUPABASE_URL;
 const SYNC_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
+// User bilgisi Dashboard'dan set edilir — DB'ye bağımlı değil
+let currentUser: { id: string; email: string } | null = null;
+
+export function setHeartbeatUser(user: { id: string; email: string } | null): void {
+  currentUser = user;
+  console.log("[Heartbeat] User set:", user?.email);
+}
+
 async function sendHeartbeat(): Promise<void> {
   try {
-    const auth = new LocalAuthService();
-    const user = await auth.getUser();
-    if (!user) return;
+    if (!currentUser) {
+      console.warn("[Heartbeat] No user set, skipping");
+      return;
+    }
 
     const payload = {
-      user_id: String(user.id),
-      user_email: user.email,
+      user_id: String(currentUser.id),
+      user_email: currentUser.email,
       app_version: typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "unknown",
       platform: "__TAURI__" in window ? "desktop" : "web",
       os_info: navigator.userAgent.substring(0, 200),
@@ -48,7 +56,9 @@ async function sendHeartbeat(): Promise<void> {
 
 export function startHeartbeat(): void {
   if (intervalId) return;
-  sendHeartbeat(); // İlk heartbeat hemen
+  console.log("[Heartbeat] Starting interval (every 2 min)");
+  // İlk heartbeat 3 saniye sonra (user set edilmiş olmalı)
+  setTimeout(sendHeartbeat, 3000);
   intervalId = setInterval(sendHeartbeat, HEARTBEAT_INTERVAL);
 }
 

@@ -9,16 +9,22 @@ export const DeviceServices = () => {
     let cleanup: (() => void) | undefined;
 
     const init = async () => {
-      const { startHeartbeat, stopHeartbeat } = await import("@/services/heartbeat");
-      const { startCommandListener, stopCommandListener } = await import("@/services/command-listener");
+      try {
+        console.log("[DeviceServices] Initializing heartbeat + command listener...");
+        const { startHeartbeat, stopHeartbeat } = await import("@/services/heartbeat");
+        const { startCommandListener, stopCommandListener } = await import("@/services/command-listener");
 
-      startHeartbeat();
-      startCommandListener();
+        startHeartbeat();
+        startCommandListener();
+        console.log("[DeviceServices] Started successfully");
 
-      cleanup = () => {
-        stopHeartbeat();
-        stopCommandListener();
-      };
+        cleanup = () => {
+          stopHeartbeat();
+          stopCommandListener();
+        };
+      } catch (err) {
+        console.error("[DeviceServices] Failed to initialize:", err);
+      }
     };
 
     init();
