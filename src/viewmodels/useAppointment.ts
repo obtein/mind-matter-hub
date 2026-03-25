@@ -76,6 +76,7 @@ export function useAppointment(appointmentId: string, patientId: string) {
   const [patient, setPatient] = useState<PatientName | null>(null);
   const [medications, setMedications] = useState<Medication[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [notes, setNotes] = useState("");
   const [status, setStatus] = useState("scheduled");
@@ -104,7 +105,9 @@ export function useAppointment(appointmentId: string, patientId: string) {
       setMedications(medicationsData || []);
       setNotes(appointmentData?.notes || "");
       setStatus(appointmentData?.status || "scheduled");
+      setError(null);
     } catch (error: any) {
+      setError(handleError(error, "Veriler yüklenemedi"));
       toast.error("Veriler yüklenemedi");
     } finally {
       setLoading(false);
@@ -274,6 +277,7 @@ export function useAppointment(appointmentId: string, patientId: string) {
     patient,
     medications,
     loading,
+    error,
     saving,
     notes,
     status,

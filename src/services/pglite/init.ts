@@ -4,6 +4,14 @@ let db: PGlite | null = null;
 let currentUserId: string | null = null;
 let initPromise: Promise<PGlite> | null = null;
 let closing = false;
+let dbInitError: string | null = null;
+
+/**
+ * Returns the current DB initialization error, if any.
+ */
+export function getDbInitError(): string | null {
+  return dbInitError;
+}
 
 /**
  * Login sonrası çağır — kullanıcıya özel DB'yi başlatır.
@@ -44,10 +52,24 @@ export async function getPGlite(): Promise<PGlite> {
       "SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'patients')"
     );
     if (!result.rows[0]?.exists) {
-      await initializeSchema(instance);
+      try {
+        await initializeSchema(instance);
+      } catch (schemaErr) {
+        const message = schemaErr instanceof Error ? schemaErr.message : "Bilinmeyen şema hatası";
+        dbInitError = `Veritabanı şeması başlatılamadı: ${message}`;
+        throw new Error(dbInitError);
+      }
     }
 
-    await runMigrations(instance);
+    try {
+      await runMigrations(instance);
+    } catch (migrationErr) {
+      const message = migrationErr instanceof Error ? migrationErr.message : "Bilinmeyen migrasyon hatası";
+      dbInitError = `Veritabanı migrasyonu başarısız: ${message}`;
+      throw new Error(dbInitError);
+    }
+
+    dbInitError = null;
     db = instance;
     return instance;
   })();

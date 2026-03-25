@@ -28,6 +28,7 @@ export function usePatients() {
 
   const [patients, setPatients] = useState<PatientWithAppointment[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [genderFilter, setGenderFilter] = useState("all");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -39,7 +40,9 @@ export function usePatients() {
     try {
       const data = await repo.getAllWithLastAppointment();
       setPatients(data);
-    } catch {
+      setError(null);
+    } catch (err: unknown) {
+      setError(handleError(err, "Hastalar yüklenemedi"));
       toast.error("Hastalar yüklenemedi");
     } finally {
       setLoading(false);
@@ -142,6 +145,7 @@ export function usePatients() {
     // State
     patients,
     loading,
+    error,
     searchTerm,
     genderFilter,
     isDialogOpen,

@@ -1,10 +1,37 @@
 import { getPGlite } from "./pglite/init";
 import { supabase } from "@/integrations/supabase/client";
+import { remoteLog } from "./remote-logger";
 
 // ── Supabase REST API (credentials from .env via supabase client) ──
 
 const SYNC_URL = import.meta.env.VITE_SUPABASE_URL;
 const SYNC_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+
+// Whitelist of allowed table names to prevent injection
+const ALLOWED_TABLES = new Set([
+  "patients", "appointments", "patient_notes",
+  "session_medications", "appointment_reminders", "notifications",
+]);
+
+function validateTableName(table: string): string {
+  if (!ALLOWED_TABLES.has(table)) {
+    throw new Error(`Invalid table name: ${table}`);
+  }
+  return table;
+}
+
+/** Convert any Date objects to ISO strings for Supabase compatibility */
+function sanitizeRow(row: Record<string, unknown>): Record<string, unknown> {
+  const sanitized: Record<string, unknown> = {};
+  for (const [key, val] of Object.entries(row)) {
+    if (val instanceof Date) {
+      sanitized[key] = val.toISOString();
+    } else {
+      sanitized[key] = val;
+    }
+  }
+  return sanitized;
+}
 
 function getHeaders(accessToken?: string) {
   return {
@@ -21,35 +48,61 @@ async function getAuthHeaders() {
 
 // ── Helpers ──
 
-async function upsertTable(table: string, rows: Record<string, unknown>[], headers: Record<string, string>): Promise<void> {
+async function upsertTable(
+  table: string,
+  rows: Record<string, unknown>[],
+  headers: Record<string, string>,
+  signal?: AbortSignal
+): Promise<void> {
   if (rows.length === 0) return;
+  const safeName = validateTableName(table);
+  const safeRows = rows.map(sanitizeRow);
 
-  const res = await fetch(`${SYNC_URL}/rest/v1/${table}`, {
+  const res = await fetch(`${SYNC_URL}/rest/v1/${safeName}`, {
     method: "POST",
     headers: { ...headers, Prefer: "resolution=merge-duplicates" },
-    body: JSON.stringify(rows),
+    body: JSON.stringify(safeRows),
+    signal,
   });
 
   if (!res.ok) {
     const errText = await res.text();
-    console.error(`Sync upload [${table}]:`, errText);
+    console.error(`Sync upload [${safeName}]:`, errText);
+    remoteLog.error(`Sync upload failed: ${safeName}`, { error: errText });
   }
 }
 
-async function fetchTable(table: string, headers: Record<string, string>, userId?: string): Promise<Record<string, unknown>[]> {
-  // Kullanıcıya özel filtreleme: doctor_id veya user_id ile
-  let url = `${SYNC_URL}/rest/v1/${table}?select=*`;
+async function fetchTable(
+  table: string,
+  headers: Record<string, string>,
+  userId?: string,
+  signal?: AbortSignal
+): Promise<Record<string, unknown>[]> {
+  const safeName = validateTableName(table);
+  let url = `${SYNC_URL}/rest/v1/${safeName}?select=*`;
   if (userId) {
-    // Tabloya göre doğru kolon ile filtrele
-    const ownerCol = table === "notifications" ? "user_id" : "doctor_id";
-    // session_medications ve appointment_reminders'da owner kolon yok, hepsini çek
-    if (["patients", "appointments", "patient_notes", "notifications"].includes(table)) {
-      url += `&${ownerCol}=eq.${userId}`;
+    const ownerCol = safeName === "notifications" ? "user_id" : "doctor_id";
+    if (["patients", "appointments", "patient_notes", "notifications"].includes(safeName)) {
+      url += `&${ownerCol}=eq.${encodeURIComponent(userId)}`;
     }
   }
-  const res = await fetch(url, { headers });
-  if (!res.ok) return [];
-  return await res.json();
+
+  try {
+    const res = await fetch(url, { headers, signal });
+    if (!res.ok) return [];
+    return await res.json();
+  } catch (err: unknown) {
+    if (err instanceof Error && err.name === "AbortError") {
+      console.warn(`Fetch aborted for ${safeName}`);
+    }
+    return [];
+  }
+}
+
+// ── Network status ──
+
+export function isOnline(): boolean {
+  return navigator.onLine;
 }
 
 // ── Upload: Lokal → Supabase ──
@@ -59,58 +112,70 @@ export async function hasSyncCredentials(): Promise<boolean> {
   return !!session;
 }
 
-export async function syncToSupabase(): Promise<{ success: boolean; message: string }> {
+export async function syncToSupabase(signal?: AbortSignal): Promise<{ success: boolean; message: string }> {
+  if (!isOnline()) {
+    return { success: false, message: "Çevrimdışısınız. Veriler sonraki bağlantıda yedeklenecek." };
+  }
+
   try {
     const headers = await getAuthHeaders();
     const db = await getPGlite();
 
-    const tables = [
+    const tableNames = [
       "patients", "appointments", "patient_notes",
       "session_medications", "appointment_reminders", "notifications",
     ];
 
-    for (const table of tables) {
-      const { rows } = await db.query(`SELECT * FROM ${table}`);
-      await upsertTable(table, rows as Record<string, unknown>[], headers);
+    for (const table of tableNames) {
+      const { rows } = await db.query(`SELECT * FROM ${validateTableName(table)}`);
+      await upsertTable(table, rows as Record<string, unknown>[], headers, signal);
     }
 
     return { success: true, message: "Veriler basariyla yedeklendi" };
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : "Yedekleme hatasi";
     console.error("Sync upload error:", error);
-    return { success: false, message: error.message || "Yedekleme hatasi" };
+    remoteLog.error("syncToSupabase failed", { error: msg });
+    return { success: false, message: msg };
   }
 }
 
 // ── Merge Sync: İki yönlü senkronizasyon ──
-// Lokalde eksik olanı Supabase'den ekle, Supabase'de eksik olanı lokale ekle.
-// Hiçbir veri silinmez.
 
 export interface SyncProgress {
   step: string;
   percent: number;
 }
 
+const SYNC_TIMEOUT_MS = 30000; // 30 saniye
+
 export async function syncFromSupabase(
   onProgress?: (p: SyncProgress) => void
 ): Promise<{ success: boolean; message: string }> {
+  if (!isOnline()) {
+    return { success: false, message: "Çevrimdışısınız. İnternet bağlantınızı kontrol edin." };
+  }
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), SYNC_TIMEOUT_MS);
+
   try {
     const headers = await getAuthHeaders();
     const db = await getPGlite();
 
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
+      clearTimeout(timeoutId);
       return { success: false, message: "Once giris yapin" };
     }
     const userId = user.id;
 
     onProgress?.({ step: "Veriler karsilastiriliyor...", percent: 5 });
 
-    // Tablo tanımları: isim, ID kolonu, doctor/user kolonu, insert SQL
     const tables = [
       {
         name: "patients",
         idCol: "id",
-        ownerCol: "doctor_id",
         insertSql: `INSERT INTO patients (id,doctor_id,full_name,phone,date_of_birth,notes,gender,address,meslek,created_at,updated_at)
                      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
                      ON CONFLICT(id) DO UPDATE SET
@@ -118,54 +183,49 @@ export async function syncFromSupabase(
                        notes=EXCLUDED.notes, gender=EXCLUDED.gender, address=EXCLUDED.address, meslek=EXCLUDED.meslek,
                        updated_at=EXCLUDED.updated_at
                      WHERE patients.updated_at < EXCLUDED.updated_at`,
-        insertParams: (r: any) => [r.id, userId, r.full_name, r.phone, r.date_of_birth, r.notes, r.gender, r.address, r.meslek ?? null, r.created_at, r.updated_at],
+        insertParams: (r: Record<string, unknown>) => [r.id, userId, r.full_name, r.phone, r.date_of_birth, r.notes, r.gender, r.address, r.meslek ?? null, r.created_at, r.updated_at],
       },
       {
         name: "appointments",
         idCol: "id",
-        ownerCol: "doctor_id",
         insertSql: `INSERT INTO appointments (id,doctor_id,patient_id,appointment_date,duration_minutes,status,notes,created_at,updated_at)
                      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
                      ON CONFLICT(id) DO UPDATE SET
                        appointment_date=EXCLUDED.appointment_date, duration_minutes=EXCLUDED.duration_minutes,
                        status=EXCLUDED.status, notes=EXCLUDED.notes, updated_at=EXCLUDED.updated_at
                      WHERE appointments.updated_at < EXCLUDED.updated_at`,
-        insertParams: (r: any) => [r.id, userId, r.patient_id, r.appointment_date, r.duration_minutes, r.status, r.notes, r.created_at, r.updated_at],
+        insertParams: (r: Record<string, unknown>) => [r.id, userId, r.patient_id, r.appointment_date, r.duration_minutes, r.status, r.notes, r.created_at, r.updated_at],
       },
       {
         name: "patient_notes",
         idCol: "id",
-        ownerCol: "doctor_id",
         insertSql: `INSERT INTO patient_notes (id,patient_id,doctor_id,title,content,created_at,updated_at)
                      VALUES ($1,$2,$3,$4,$5,$6,$7)
                      ON CONFLICT(id) DO UPDATE SET
                        title=EXCLUDED.title, content=EXCLUDED.content, updated_at=EXCLUDED.updated_at
                      WHERE patient_notes.updated_at < EXCLUDED.updated_at`,
-        insertParams: (r: any) => [r.id, r.patient_id, userId, r.title, r.content, r.created_at, r.updated_at],
+        insertParams: (r: Record<string, unknown>) => [r.id, r.patient_id, userId, r.title, r.content, r.created_at, r.updated_at],
       },
       {
         name: "session_medications",
         idCol: "id",
-        ownerCol: null,
         insertSql: `INSERT INTO session_medications (id,appointment_id,medication_name,dosage,instructions,created_at)
                      VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT(id) DO NOTHING`,
-        insertParams: (r: any) => [r.id, r.appointment_id, r.medication_name, r.dosage, r.instructions, r.created_at],
+        insertParams: (r: Record<string, unknown>) => [r.id, r.appointment_id, r.medication_name, r.dosage, r.instructions, r.created_at],
       },
       {
         name: "appointment_reminders",
         idCol: "id",
-        ownerCol: null,
         insertSql: `INSERT INTO appointment_reminders (id,appointment_id,reminder_type,reminder_time,is_sent,sent_at,error_message,created_at)
                      VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT(id) DO NOTHING`,
-        insertParams: (r: any) => [r.id, r.appointment_id, r.reminder_type, r.reminder_time, r.is_sent, r.sent_at, r.error_message, r.created_at],
+        insertParams: (r: Record<string, unknown>) => [r.id, r.appointment_id, r.reminder_type, r.reminder_time, r.is_sent, r.sent_at, r.error_message, r.created_at],
       },
       {
         name: "notifications",
         idCol: "id",
-        ownerCol: "user_id",
         insertSql: `INSERT INTO notifications (id,user_id,title,message,type,is_read,related_appointment_id,related_patient_id,created_at)
                      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT(id) DO NOTHING`,
-        insertParams: (r: any) => [r.id, userId, r.title, r.message, r.type, r.is_read, r.related_appointment_id, r.related_patient_id, r.created_at],
+        insertParams: (r: Record<string, unknown>) => [r.id, userId, r.title, r.message, r.type, r.is_read, r.related_appointment_id, r.related_patient_id, r.created_at],
       },
     ];
 
@@ -173,40 +233,52 @@ export async function syncFromSupabase(
     let addedToRemote = 0;
 
     for (let i = 0; i < tables.length; i++) {
+      if (controller.signal.aborted) break;
+
       const t = tables[i];
       const pct = Math.round(((i + 1) / tables.length) * 80) + 10;
       onProgress?.({ step: `${t.name} senkronize ediliyor...`, percent: pct });
 
-      // Her iki taraftan ID'leri çek (kullanıcıya özel)
-      const remoteRows = await fetchTable(t.name, headers, userId);
-      const { rows: localRows } = await db.query(`SELECT * FROM ${t.name}`);
+      const remoteRows = await fetchTable(t.name, headers, userId, controller.signal);
+      const { rows: localRows } = await db.query(`SELECT * FROM ${validateTableName(t.name)}`);
 
-      const localIds = new Set((localRows as any[]).map((r) => r[t.idCol]));
+      const localIds = new Set((localRows as Record<string, unknown>[]).map((r) => r[t.idCol]));
       const remoteIds = new Set(remoteRows.map((r) => r[t.idCol]));
 
       // Supabase'de olup lokalde olmayan → lokale ekle
       const missingInLocal = remoteRows.filter((r) => !localIds.has(r[t.idCol]));
       for (const r of missingInLocal) {
-        await db.query(t.insertSql, t.insertParams(r));
-        addedToLocal++;
+        try {
+          await db.query(t.insertSql, t.insertParams(sanitizeRow(r)));
+          addedToLocal++;
+        } catch (err) {
+          console.error(`Failed to insert ${t.name} record:`, err);
+        }
       }
 
       // Lokalde olup Supabase'de olmayan → Supabase'e ekle
-      const missingInRemote = (localRows as any[]).filter((r) => !remoteIds.has(r[t.idCol]));
+      const missingInRemote = (localRows as Record<string, unknown>[]).filter((r) => !remoteIds.has(r[t.idCol]));
       if (missingInRemote.length > 0) {
-        await upsertTable(t.name, missingInRemote, headers);
+        await upsertTable(t.name, missingInRemote, headers, controller.signal);
         addedToRemote += missingInRemote.length;
       }
     }
 
+    clearTimeout(timeoutId);
     onProgress?.({ step: "Tamamlandi!", percent: 100 });
 
     return {
       success: true,
       message: `Senkronizasyon tamamlandi. Lokale ${addedToLocal}, sunucuya ${addedToRemote} kayit eklendi.`,
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
+    clearTimeout(timeoutId);
+    const msg = error instanceof Error ? error.message : "Senkronizasyon hatasi";
+    if (error instanceof Error && error.name === "AbortError") {
+      return { success: false, message: "Senkronizasyon zaman asimina ugradi. Tekrar deneyin." };
+    }
     console.error("Merge sync error:", error);
-    return { success: false, message: error.message || "Senkronizasyon hatasi" };
+    remoteLog.error("syncFromSupabase failed", { error: msg });
+    return { success: false, message: msg };
   }
 }
