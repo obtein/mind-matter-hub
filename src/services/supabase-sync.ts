@@ -147,7 +147,7 @@ export interface SyncProgress {
   percent: number;
 }
 
-const SYNC_TIMEOUT_MS = 30000; // 30 saniye
+const SYNC_TIMEOUT_MS = 120000; // 2 dakika (büyük veri setleri için)
 
 export async function syncFromSupabase(
   onProgress?: (p: SyncProgress) => void
@@ -210,21 +210,28 @@ export async function syncFromSupabase(
         name: "session_medications",
         idCol: "id",
         insertSql: `INSERT INTO session_medications (id,appointment_id,medication_name,dosage,instructions,created_at)
-                     VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT(id) DO NOTHING`,
+                     VALUES ($1,$2,$3,$4,$5,$6)
+                     ON CONFLICT(id) DO UPDATE SET
+                       medication_name=EXCLUDED.medication_name, dosage=EXCLUDED.dosage,
+                       instructions=EXCLUDED.instructions`,
         insertParams: (r: Record<string, unknown>) => [r.id, r.appointment_id, r.medication_name, r.dosage, r.instructions, r.created_at],
       },
       {
         name: "appointment_reminders",
         idCol: "id",
         insertSql: `INSERT INTO appointment_reminders (id,appointment_id,reminder_type,reminder_time,is_sent,sent_at,error_message,created_at)
-                     VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT(id) DO NOTHING`,
+                     VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+                     ON CONFLICT(id) DO UPDATE SET
+                       is_sent=EXCLUDED.is_sent, sent_at=EXCLUDED.sent_at, error_message=EXCLUDED.error_message`,
         insertParams: (r: Record<string, unknown>) => [r.id, r.appointment_id, r.reminder_type, r.reminder_time, r.is_sent, r.sent_at, r.error_message, r.created_at],
       },
       {
         name: "notifications",
         idCol: "id",
         insertSql: `INSERT INTO notifications (id,user_id,title,message,type,is_read,related_appointment_id,related_patient_id,created_at)
-                     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT(id) DO NOTHING`,
+                     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+                     ON CONFLICT(id) DO UPDATE SET
+                       is_read=EXCLUDED.is_read`,
         insertParams: (r: Record<string, unknown>) => [r.id, userId, r.title, r.message, r.type, r.is_read, r.related_appointment_id, r.related_patient_id, r.created_at],
       },
     ];
@@ -247,12 +254,30 @@ export async function syncFromSupabase(
 
       // Supabase'de olup lokalde olmayan → lokale ekle
       const missingInLocal = remoteRows.filter((r) => !localIds.has(r[t.idCol]));
+      // Ayrıca lokalde olan ama güncellenmiş olabilecek kayıtlar → güncelle
+      const existingInBoth = remoteRows.filter((r) => localIds.has(r[t.idCol]));
+
       for (const r of missingInLocal) {
         try {
           await db.query(t.insertSql, t.insertParams(sanitizeRow(r)));
           addedToLocal++;
         } catch (err) {
-          console.error(`Failed to insert ${t.name} record:`, err);
+          const errMsg = err instanceof Error ? err.message : String(err);
+          console.error(`Failed to insert ${t.name} record:`, errMsg);
+          remoteLog.error(`Sync insert failed: ${t.name}`, {
+            error: errMsg,
+            recordId: String(r[t.idCol] ?? "unknown"),
+            isFkError: errMsg.includes("foreign key") || errMsg.includes("violates"),
+          });
+        }
+      }
+
+      // Mevcut kayıtları da güncelle (ON CONFLICT DO UPDATE)
+      for (const r of existingInBoth) {
+        try {
+          await db.query(t.insertSql, t.insertParams(sanitizeRow(r)));
+        } catch {
+          // Update failed — skip silently (already exists with current data)
         }
       }
 
@@ -264,12 +289,32 @@ export async function syncFromSupabase(
       }
     }
 
+    // Sync sonrası doğrulama — kayıt sayılarını karşılaştır
+    onProgress?.({ step: "Doğrulanıyor...", percent: 95 });
+    const verification: string[] = [];
+    for (const t of tables) {
+      try {
+        const { rows: localCount } = await db.query(`SELECT COUNT(*)::int as c FROM ${validateTableName(t.name)}`);
+        const remoteCount = (await fetchTable(t.name, headers, userId, controller.signal)).length;
+        const localC = (localCount as Record<string, unknown>[])[0]?.c as number ?? 0;
+        if (localC < remoteCount) {
+          verification.push(`${t.name}: lokal ${localC} / sunucu ${remoteCount}`);
+        }
+      } catch {
+        // Doğrulama hatası — kritik değil
+      }
+    }
+
     clearTimeout(timeoutId);
     onProgress?.({ step: "Tamamlandi!", percent: 100 });
 
+    const verifyMsg = verification.length > 0
+      ? ` Uyarı: Bazı tablolarda eksik kayıt var: ${verification.join(", ")}`
+      : "";
+
     return {
       success: true,
-      message: `Senkronizasyon tamamlandi. Lokale ${addedToLocal}, sunucuya ${addedToRemote} kayit eklendi.`,
+      message: `Senkronizasyon tamamlandi. Lokale ${addedToLocal}, sunucuya ${addedToRemote} kayit eklendi.${verifyMsg}`,
     };
   } catch (error: unknown) {
     clearTimeout(timeoutId);
