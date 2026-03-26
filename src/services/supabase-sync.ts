@@ -182,7 +182,7 @@ export async function syncFromSupabase(
                        full_name=EXCLUDED.full_name, phone=EXCLUDED.phone, date_of_birth=EXCLUDED.date_of_birth,
                        notes=EXCLUDED.notes, gender=EXCLUDED.gender, address=EXCLUDED.address, meslek=EXCLUDED.meslek,
                        updated_at=EXCLUDED.updated_at
-                     WHERE patients.updated_at < EXCLUDED.updated_at`,
+`,
         insertParams: (r: Record<string, unknown>) => [r.id, userId, r.full_name, r.phone, r.date_of_birth, r.notes, r.gender, r.address, r.meslek ?? null, r.created_at, r.updated_at],
       },
       {
@@ -193,7 +193,7 @@ export async function syncFromSupabase(
                      ON CONFLICT(id) DO UPDATE SET
                        appointment_date=EXCLUDED.appointment_date, duration_minutes=EXCLUDED.duration_minutes,
                        status=EXCLUDED.status, notes=EXCLUDED.notes, updated_at=EXCLUDED.updated_at
-                     WHERE appointments.updated_at < EXCLUDED.updated_at`,
+`,
         insertParams: (r: Record<string, unknown>) => [r.id, userId, r.patient_id, r.appointment_date, r.duration_minutes, r.status, r.notes, r.created_at, r.updated_at],
       },
       {
@@ -203,7 +203,7 @@ export async function syncFromSupabase(
                      VALUES ($1,$2,$3,$4,$5,$6,$7)
                      ON CONFLICT(id) DO UPDATE SET
                        title=EXCLUDED.title, content=EXCLUDED.content, updated_at=EXCLUDED.updated_at
-                     WHERE patient_notes.updated_at < EXCLUDED.updated_at`,
+`,
         insertParams: (r: Record<string, unknown>) => [r.id, r.patient_id, userId, r.title, r.content, r.created_at, r.updated_at],
       },
       {
