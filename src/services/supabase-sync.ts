@@ -21,11 +21,26 @@ function validateTableName(table: string): string {
 }
 
 /** Convert any Date objects to ISO strings for Supabase compatibility */
+function isValidDateString(s: string): boolean {
+  // Reject dates with year > 9999 or < 0001
+  const yearMatch = s.match(/^(\d{4,})/);
+  if (yearMatch) {
+    const year = parseInt(yearMatch[1], 10);
+    if (year < 1 || year > 9999) return false;
+  }
+  const d = new Date(s);
+  return !isNaN(d.getTime()) && d.getFullYear() >= 1900 && d.getFullYear() <= 2100;
+}
+
 function sanitizeRow(row: Record<string, unknown>): Record<string, unknown> {
   const sanitized: Record<string, unknown> = {};
   for (const [key, val] of Object.entries(row)) {
     if (val instanceof Date) {
-      sanitized[key] = val.toISOString();
+      const iso = val.toISOString();
+      sanitized[key] = isValidDateString(iso) ? iso : null;
+    } else if (typeof val === "string" && (key.includes("date") || key.includes("_at") || key.includes("time"))) {
+      // Validate date-like string fields
+      sanitized[key] = isValidDateString(val) ? val : null;
     } else {
       sanitized[key] = val;
     }
