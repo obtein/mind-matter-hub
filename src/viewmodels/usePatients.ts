@@ -35,6 +35,7 @@ export function usePatients() {
   const [editingPatient, setEditingPatient] = useState<PatientWithAppointment | null>(null);
   const [deletePatientId, setDeletePatientId] = useState<string | null>(null);
   const [formData, setFormData] = useState<PatientFormData>(EMPTY_FORM);
+  const [submitting, setSubmitting] = useState(false);
   const [displayCount, setDisplayCount] = useState(50);
 
   const fetchPatients = useCallback(async () => {
@@ -106,11 +107,13 @@ export function usePatients() {
   };
 
   const submitPatient = useCallback(async () => {
+    if (submitting) return false;
     if (!validatePhone(formData.phone)) {
       toast.error("Geçersiz telefon numarası");
       return false;
     }
 
+    setSubmitting(true);
     try {
       const user = await auth.getUser();
       if (!user) throw new Error("Kullanıcı bulunamadı");
@@ -140,8 +143,10 @@ export function usePatients() {
     } catch (error: unknown) {
       toast.error(handleError(error, "Hasta kaydedilemedi"));
       return false;
+    } finally {
+      setSubmitting(false);
     }
-  }, [auth, editingPatient, formData, repo, resetForm, fetchPatients]);
+  }, [auth, editingPatient, formData, repo, resetForm, fetchPatients, submitting]);
 
   const deletePatient = useCallback(async (id: string) => {
     try {
@@ -150,6 +155,8 @@ export function usePatients() {
       await fetchPatients();
     } catch (error: unknown) {
       toast.error(handleError(error, "Hasta silinemedi"));
+    } finally {
+      setDeletePatientId(null);
     }
   }, [repo, fetchPatients]);
 
@@ -169,6 +176,7 @@ export function usePatients() {
     editingPatient,
     deletePatientId,
     formData,
+    submitting,
     filteredPatients,
     displayedPatients,
     hasMore,
