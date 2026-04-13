@@ -71,7 +71,15 @@ export function usePatientDetail(patientId: string) {
   const [appointments, setAppointments] = useState<PatientAppointment[]>([]);
   const [medications, setMedications] = useState<DiagnosisHistory[]>([]);
   const [loading, setLoading] = useState(true);
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isDialogOpenRaw, setIsDialogOpenRaw] = useState(false);
+  const setIsDialogOpen = useCallback((open: boolean) => {
+    setIsDialogOpenRaw(open);
+    if (!open) {
+      setFormData({ ...DEFAULT_FORM });
+      setConflictWarning(null);
+    }
+  }, []);
+  const isDialogOpen = isDialogOpenRaw;
   const [conflictWarning, setConflictWarning] = useState<string | null>(null);
   const [checkingConflict, setCheckingConflict] = useState(false);
   const [diagSearchTerm, setDiagSearchTerm] = useState("");
@@ -190,6 +198,10 @@ export function usePatientDetail(patientId: string) {
         );
         if (isNaN(appointmentDateTime.getTime())) {
           toast.error("Geçersiz tarih veya saat formatı");
+          return;
+        }
+        if (appointmentDateTime < new Date()) {
+          toast.error("Geçmiş tarih için randevu oluşturulamaz");
           return;
         }
         const durationMinutes = parseInt(formData.duration_minutes);

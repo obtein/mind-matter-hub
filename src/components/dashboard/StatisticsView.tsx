@@ -199,6 +199,11 @@ export const StatisticsView = () => {
               </div>
             )}
           </div>
+          {vm.stats.ageDistribution.length > 0 && vm.stats.patientsWithDob < vm.stats.totalPatients && (
+            <p className="text-xs text-muted-foreground mt-2">
+              * {vm.stats.totalPatients - vm.stats.patientsWithDob} hastanın doğum tarihi girilmemiş, yaş dağılımına dahil değil.
+            </p>
+          )}
         </CardContent>
       </Card>
     </div>

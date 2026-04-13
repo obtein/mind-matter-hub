@@ -103,11 +103,16 @@ export function usePatients() {
 
   const validatePhone = (phone: string): boolean => {
     if (!phone) return true;
-    return /^[0-9\s\-+()]{7,15}$/.test(phone);
+    return /^[0-9\s\-+()]{6,20}$/.test(phone);
   };
 
   const submitPatient = useCallback(async () => {
     if (submitting) return false;
+
+    if (!formData.full_name.trim()) {
+      toast.error("Ad Soyad alanı zorunludur");
+      return false;
+    }
     if (!validatePhone(formData.phone)) {
       toast.error("Geçersiz telefon numarası");
       return false;
