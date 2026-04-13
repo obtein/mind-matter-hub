@@ -27,6 +27,7 @@ export interface Stats {
   totalPatients: number;
   totalAppointments: number;
   completedAppointments: number;
+  patientsWithDob: number;
   genderDistribution: GenderDistributionItem[];
   ageDistribution: AgeDistributionItem[];
   monthlyAppointments: MonthlyAppointmentItem[];
@@ -132,10 +133,13 @@ export function useStatistics() {
       const completedAppointments =
         appointments?.filter((a) => a.status === "completed").length || 0;
 
+      const patientsWithDob = patients?.filter((p) => p.date_of_birth).length || 0;
+
       setStats({
         totalPatients: patients?.length || 0,
         totalAppointments: appointments?.length || 0,
         completedAppointments,
+        patientsWithDob,
         genderDistribution,
         ageDistribution,
         monthlyAppointments,

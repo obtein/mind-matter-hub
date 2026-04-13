@@ -247,6 +247,14 @@ export function useAppointment(appointmentId: string, patientId: string) {
         const appointmentDateTime = new Date(
           `${newAppointmentForm.appointment_date}T${newAppointmentForm.appointment_time}`
         );
+        if (isNaN(appointmentDateTime.getTime())) {
+          toast.error("Geçersiz tarih veya saat formatı");
+          return;
+        }
+        if (appointmentDateTime < new Date()) {
+          toast.error("Geçmiş tarih için randevu oluşturulamaz");
+          return;
+        }
         const durationMinutes = parseInt(newAppointmentForm.duration_minutes);
 
         // Check for conflicts

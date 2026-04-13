@@ -197,7 +197,18 @@ export const PatientsView = ({ onPatientSelect }: PatientsViewProps) => {
         )}
       </div>
 
-      {vm.searchTerm.length < 2 ? (
+      {vm.patients.length === 0 && vm.searchTerm.length < 2 ? (
+        <Card className="border-dashed">
+          <CardContent className="flex flex-col items-center justify-center py-12">
+            <User className="w-12 h-12 text-muted-foreground/50 mb-4" />
+            <p className="text-muted-foreground text-center">Henüz hasta eklenmemiş</p>
+            <Button variant="outline" className="mt-4" onClick={vm.openNewDialog}>
+              <Plus className="w-4 h-4 mr-2" />
+              İlk hastanızı ekleyin
+            </Button>
+          </CardContent>
+        </Card>
+      ) : vm.searchTerm.length < 2 ? (
         <Card className="border-dashed">
           <CardContent className="flex flex-col items-center justify-center py-12">
             <Search className="w-12 h-12 text-muted-foreground/50 mb-4" />
