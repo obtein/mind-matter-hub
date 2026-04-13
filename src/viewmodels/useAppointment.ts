@@ -80,10 +80,26 @@ export function useAppointment(appointmentId: string, patientId: string) {
   const [saving, setSaving] = useState(false);
   const [notes, setNotes] = useState("");
   const [status, setStatus] = useState("scheduled");
-  const [isMedicationDialogOpen, setIsMedicationDialogOpen] = useState(false);
-  const [isNewAppointmentDialogOpen, setIsNewAppointmentDialogOpen] = useState(false);
+  const [isMedicationDialogOpenRaw, setIsMedicationDialogOpenRaw] = useState(false);
+  const [isNewAppointmentDialogOpenRaw, setIsNewAppointmentDialogOpenRaw] = useState(false);
+
+  // Reset form when dialog closes
+  const setIsMedicationDialogOpen = useCallback((open: boolean) => {
+    setIsMedicationDialogOpenRaw(open);
+    if (!open) setMedicationForm({ ...EMPTY_MEDICATION_FORM });
+  }, []);
+
+  const setIsNewAppointmentDialogOpen = useCallback((open: boolean) => {
+    setIsNewAppointmentDialogOpenRaw(open);
+    if (!open) {
+      setNewAppointmentForm({ ...DEFAULT_NEW_APPOINTMENT_FORM });
+      setConflictWarning(null);
+    }
+  }, []);
   const [conflictWarning, setConflictWarning] = useState<string | null>(null);
   const [checkingConflict, setCheckingConflict] = useState(false);
+  const [addingMedication, setAddingMedication] = useState(false);
+  const [creatingAppointment, setCreatingAppointment] = useState(false);
   const [deleteMedicationId, setDeleteMedicationId] = useState<string | null>(null);
   const [medicationForm, setMedicationForm] = useState<MedicationFormData>({
     ...EMPTY_MEDICATION_FORM,
@@ -176,12 +192,14 @@ export function useAppointment(appointmentId: string, patientId: string) {
   const addMedication = useCallback(
     async (e?: React.FormEvent) => {
       e?.preventDefault();
+      if (addingMedication) return;
 
       if (!medicationForm.medication_name.trim()) {
         toast.error("Tanı boş olamaz");
         return;
       }
 
+      setAddingMedication(true);
       try {
         await medicationRepo.create({
           appointment_id: appointmentId,
@@ -196,9 +214,11 @@ export function useAppointment(appointmentId: string, patientId: string) {
         fetchData();
       } catch (error: unknown) {
         toast.error(error instanceof Error ? error.message : "Tanı eklenemedi");
+      } finally {
+        setAddingMedication(false);
       }
     },
-    [appointmentId, medicationForm, medicationRepo, fetchData]
+    [appointmentId, medicationForm, medicationRepo, fetchData, addingMedication]
   );
 
   const deleteMedication = useCallback(
@@ -217,7 +237,9 @@ export function useAppointment(appointmentId: string, patientId: string) {
   const createNewAppointment = useCallback(
     async (e?: React.FormEvent) => {
       e?.preventDefault();
+      if (creatingAppointment) return;
 
+      setCreatingAppointment(true);
       try {
         const user = await auth.getUser();
         if (!user) throw new Error("Kullanıcı bulunamadı");
@@ -266,9 +288,11 @@ export function useAppointment(appointmentId: string, patientId: string) {
         setNewAppointmentForm({ ...DEFAULT_NEW_APPOINTMENT_FORM });
       } catch (error: unknown) {
         toast.error(error instanceof Error ? error.message : "Randevu oluşturulamadı");
+      } finally {
+        setCreatingAppointment(false);
       }
     },
-    [auth, newAppointmentForm, patientId, db, appointmentRepo, reminderRepo]
+    [auth, newAppointmentForm, patientId, db, appointmentRepo, reminderRepo, creatingAppointment]
   );
 
   return {
@@ -281,8 +305,10 @@ export function useAppointment(appointmentId: string, patientId: string) {
     saving,
     notes,
     status,
-    isMedicationDialogOpen,
-    isNewAppointmentDialogOpen,
+    isMedicationDialogOpen: isMedicationDialogOpenRaw,
+    isNewAppointmentDialogOpen: isNewAppointmentDialogOpenRaw,
+    addingMedication,
+    creatingAppointment,
     conflictWarning,
     checkingConflict,
     deleteMedicationId,

@@ -77,6 +77,7 @@ export function usePatientDetail(patientId: string) {
   const [diagSearchTerm, setDiagSearchTerm] = useState("");
   const [diagDateFilter, setDiagDateFilter] = useState<string>("");
   const [deleteAppointmentId, setDeleteAppointmentId] = useState<string | null>(null);
+  const [creatingAppointment, setCreatingAppointment] = useState(false);
   const [formData, setFormData] = useState<AppointmentFormData>({ ...DEFAULT_FORM });
 
   const fetchData = useCallback(async () => {
@@ -177,7 +178,9 @@ export function usePatientDetail(patientId: string) {
   const createAppointment = useCallback(
     async (e?: React.FormEvent) => {
       e?.preventDefault();
+      if (creatingAppointment) return;
 
+      setCreatingAppointment(true);
       try {
         const user = await auth.getUser();
         if (!user) throw new Error("Kullanıcı bulunamadı");
@@ -231,9 +234,11 @@ export function usePatientDetail(patientId: string) {
         fetchData();
       } catch (error: unknown) {
         toast.error(handleError(error, "Randevu oluşturulamadı"));
+      } finally {
+        setCreatingAppointment(false);
       }
     },
-    [auth, formData, patientId, db, appointmentRepo, reminderRepo, fetchData]
+    [auth, formData, patientId, db, appointmentRepo, reminderRepo, fetchData, creatingAppointment]
   );
 
   const deleteAppointment = useCallback(
@@ -295,6 +300,7 @@ export function usePatientDetail(patientId: string) {
     diagSearchTerm,
     diagDateFilter,
     deleteAppointmentId,
+    creatingAppointment,
     formData,
     filteredDiagnoses,
 

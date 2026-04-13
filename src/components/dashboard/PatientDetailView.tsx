@@ -500,8 +500,10 @@ export const PatientDetailView = ({ patientId, onBack, onAppointmentSelect }: Pa
                     rows={3}
                   />
                 </div>
-                <Button type="submit" className="w-full" disabled={!!vm.conflictWarning || vm.checkingConflict}>
-                  Randevu Oluştur
+                <Button type="submit" className="w-full" disabled={!!vm.conflictWarning || vm.checkingConflict || vm.creatingAppointment}>
+                  {vm.creatingAppointment ? (
+                    <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Oluşturuluyor...</>
+                  ) : "Randevu Oluştur"}
                 </Button>
               </form>
             </DialogContent>

@@ -128,8 +128,12 @@ export const PatientsView = ({ onPatientSelect }: PatientsViewProps) => {
                   rows={3}
                 />
               </div>
-              <Button type="submit" className="w-full">
-                {vm.editingPatient ? "Güncelle" : "Ekle"}
+              <Button type="submit" className="w-full" disabled={vm.submitting}>
+                {vm.submitting ? (
+                  <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Kaydediliyor...</>
+                ) : (
+                  vm.editingPatient ? "Güncelle" : "Ekle"
+                )}
               </Button>
             </form>
           </DialogContent>
