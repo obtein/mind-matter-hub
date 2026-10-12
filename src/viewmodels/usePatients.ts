@@ -1,5 +1,5 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
-import { useAuth, useDb } from "@/services/ServiceContext";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { useDb } from "@/services/ServiceContext";
 import { PatientRepository } from "@/repositories/PatientRepository";
 import type { Patient, PatientInsert } from "@/services/db";
 import { toast } from "sonner";
@@ -23,7 +23,6 @@ const EMPTY_FORM: PatientFormData = {
 export type PatientWithAppointment = Patient & { last_appointment: string | null };
 
 export function usePatients() {
-  const auth = useAuth();
   const db = useDb();
   const repo = useMemo(() => new PatientRepository(db), [db]);
 
@@ -37,6 +36,9 @@ export function usePatients() {
   const [deletePatientId, setDeletePatientId] = useState<string | null>(null);
   const [formData, setFormData] = useState<PatientFormData>(EMPTY_FORM);
   const [submitting, setSubmitting] = useState(false);
+  // In-flight flag in a ref: a state flag is read from a stale closure when two
+  // submits come from the same render, and both would pass.
+  const submitInFlight = useRef(false);
   const [displayCount, setDisplayCount] = useState(50);
 
   const fetchPatients = useCallback(async () => {
@@ -103,7 +105,9 @@ export function usePatients() {
   }, []);
 
   const submitPatient = useCallback(async () => {
-    if (submitting) return false;
+    // Ignore submits that arrive while a save is running or while the dialog is
+    // already closing (Radix keeps it on screen for the exit animation).
+    if (submitInFlight.current || !isDialogOpen) return false;
 
     if (!formData.full_name.trim()) {
       toast.error("Ad Soyad alanı zorunludur");
@@ -119,10 +123,13 @@ export function usePatients() {
       return false;
     }
 
+    submitInFlight.current = true;
     setSubmitting(true);
     try {
-      const user = await auth.getUser();
-      if (!user) throw new Error("Kullanıcı bulunamadı");
+      // The doctor is the owner of the open local database. The former
+      // auth.getUser() call was a network request to the Auth server.
+      const doctorId = db.getCurrentUserId();
+      if (!doctorId) throw new Error("Kullanıcı bulunamadı");
 
       const patientData = {
         full_name: formData.full_name,
@@ -138,7 +145,7 @@ export function usePatients() {
         await repo.update(editingPatient.id, patientData);
         toast.success("Hasta güncellendi");
       } else {
-        await repo.create({ ...patientData, doctor_id: user.id });
+        await repo.create({ ...patientData, doctor_id: doctorId });
         toast.success("Hasta eklendi");
       }
 
@@ -150,9 +157,10 @@ export function usePatients() {
       toast.error(handleError(error, "Hasta kaydedilemedi"));
       return false;
     } finally {
+      submitInFlight.current = false;
       setSubmitting(false);
     }
-  }, [auth, editingPatient, formData, repo, resetForm, fetchPatients, submitting]);
+  }, [db, editingPatient, formData, repo, resetForm, fetchPatients, isDialogOpen]);
 
   const deletePatient = useCallback(async (id: string) => {
     try {

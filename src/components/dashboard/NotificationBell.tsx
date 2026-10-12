@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useAuth, useDb } from "@/services/ServiceContext";
+import { useDb } from "@/services/ServiceContext";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
@@ -24,7 +24,6 @@ interface Notification {
 }
 
 export const NotificationBell = () => {
-  const auth = useAuth();
   const db = useDb();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -56,8 +55,9 @@ export const NotificationBell = () => {
 
   const checkUpcomingAppointments = async () => {
     try {
-      const user = await auth.getUser();
-      if (!user) return;
+      // Owner of the open local database; no network call.
+      const userId = db.getCurrentUserId();
+      if (!userId) return;
 
       const now = new Date();
       const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
@@ -80,7 +80,7 @@ export const NotificationBell = () => {
           const aptDate = format(new Date(apt.appointment_date), "d MMMM", { locale: tr });
 
           await db.createNotification({
-            user_id: user.id,
+            user_id: userId,
             title: "Yaklaşan Randevu",
             message: `${patientName} - ${aptDate} saat ${aptTime}`,
             type: "reminder",

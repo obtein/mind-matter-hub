@@ -172,6 +172,10 @@ export interface DbService {
   // Reminders
   createReminder(data: ReminderInsert): Promise<void>;
 
+  // Session
+  /** Id of the doctor whose local database is open. No network call. */
+  getCurrentUserId(): string | null;
+
   // Profiles
   getProfile(): Promise<{ full_name: string } | null>;
 

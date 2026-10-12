@@ -1,5 +1,6 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
-import { useAuth, useDb } from "@/services/ServiceContext";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { format } from "date-fns";
+import { useDb } from "@/services/ServiceContext";
 import { PatientRepository } from "@/repositories/PatientRepository";
 import { AppointmentRepository } from "@/repositories/AppointmentRepository";
 import { MedicationRepository } from "@/repositories/MedicationRepository";
@@ -44,13 +45,15 @@ export interface AppointmentFormData {
   reminder_time: string;
 }
 
-const DEFAULT_FORM: AppointmentFormData = {
-  appointment_date: new Date().toISOString().split("T")[0],
+// Built on every call: the default date is today's local date, not the UTC date
+// of the day the app was started.
+const defaultForm = (): AppointmentFormData => ({
+  appointment_date: format(new Date(), "yyyy-MM-dd"),
   appointment_time: "09:00",
   duration_minutes: "60",
   notes: "",
   reminder_time: "1_day",
-};
+});
 
 const REMINDER_OFFSETS: Record<string, number> = {
   "1_hour": 60 * 60 * 1000,
@@ -60,7 +63,6 @@ const REMINDER_OFFSETS: Record<string, number> = {
 };
 
 export function usePatientDetail(patientId: string) {
-  const auth = useAuth();
   const db = useDb();
   const patientRepo = useMemo(() => new PatientRepository(db), [db]);
   const appointmentRepo = useMemo(() => new AppointmentRepository(db), [db]);
@@ -75,7 +77,7 @@ export function usePatientDetail(patientId: string) {
   const setIsDialogOpen = useCallback((open: boolean) => {
     setIsDialogOpenRaw(open);
     if (!open) {
-      setFormData({ ...DEFAULT_FORM });
+      setFormData(defaultForm());
       setConflictWarning(null);
     }
   }, []);
@@ -86,7 +88,10 @@ export function usePatientDetail(patientId: string) {
   const [diagDateFilter, setDiagDateFilter] = useState<string>("");
   const [deleteAppointmentId, setDeleteAppointmentId] = useState<string | null>(null);
   const [creatingAppointment, setCreatingAppointment] = useState(false);
-  const [formData, setFormData] = useState<AppointmentFormData>({ ...DEFAULT_FORM });
+  // In-flight flag in a ref: a state flag is read from a stale closure when two
+  // submits come from the same render, and both would pass.
+  const appointmentInFlight = useRef(false);
+  const [formData, setFormData] = useState<AppointmentFormData>(defaultForm);
 
   const fetchData = useCallback(async () => {
     try {
@@ -186,12 +191,17 @@ export function usePatientDetail(patientId: string) {
   const createAppointment = useCallback(
     async (e?: React.FormEvent) => {
       e?.preventDefault();
-      if (creatingAppointment) return;
+      // Ignore submits that arrive while a create is running or while the dialog
+      // is already closing (Radix keeps it on screen for the exit animation).
+      if (appointmentInFlight.current || !isDialogOpenRaw) return;
 
+      appointmentInFlight.current = true;
       setCreatingAppointment(true);
       try {
-        const user = await auth.getUser();
-        if (!user) throw new Error("Kullanıcı bulunamadı");
+        // The doctor is the owner of the open local database. The former
+        // auth.getUser() call was a network request to the Auth server.
+        const doctorId = db.getCurrentUserId();
+        if (!doctorId) throw new Error("Kullanıcı bulunamadı");
 
         const appointmentDateTime = new Date(
           `${formData.appointment_date}T${formData.appointment_time}`
@@ -218,7 +228,7 @@ export function usePatientDetail(patientId: string) {
 
         const appointmentData = await appointmentRepo.create({
           patient_id: patientId,
-          doctor_id: user.id,
+          doctor_id: doctorId,
           appointment_date: appointmentDateTime.toISOString(),
           duration_minutes: durationMinutes,
           notes: formData.notes || null,
@@ -239,15 +249,24 @@ export function usePatientDetail(patientId: string) {
 
         toast.success("Randevu oluşturuldu");
         setIsDialogOpen(false);
-        setFormData({ ...DEFAULT_FORM });
         fetchData();
       } catch (error: unknown) {
         toast.error(handleError(error, "Randevu oluşturulamadı"));
       } finally {
+        appointmentInFlight.current = false;
         setCreatingAppointment(false);
       }
     },
-    [auth, formData, patientId, db, appointmentRepo, reminderRepo, fetchData, creatingAppointment]
+    [
+      formData,
+      patientId,
+      db,
+      appointmentRepo,
+      reminderRepo,
+      fetchData,
+      isDialogOpenRaw,
+      setIsDialogOpen,
+    ]
   );
 
   const deleteAppointment = useCallback(

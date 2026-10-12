@@ -1,4 +1,4 @@
-import { getPGlite } from "./pglite/init";
+import { getPGlite, getCurrentDbUserId } from "./pglite/init";
 import { remoteLog } from "./remote-logger";
 
 /** PGlite returns Date objects for timestamp columns. Ensure they are ISO strings. */
@@ -26,6 +26,12 @@ import type {
 } from "./db";
 
 export class PGliteDbService implements DbService {
+  // ── Session ──
+
+  getCurrentUserId(): string | null {
+    return getCurrentDbUserId();
+  }
+
   // ── Patients ──
 
   async getPatients(): Promise<Patient[]> {

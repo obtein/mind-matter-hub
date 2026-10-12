@@ -1,5 +1,5 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
-import { useAuth, useDb } from "@/services/ServiceContext";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { useDb } from "@/services/ServiceContext";
 import { AppointmentRepository } from "@/repositories/AppointmentRepository";
 import { MedicationRepository } from "@/repositories/MedicationRepository";
 import { PatientRepository } from "@/repositories/PatientRepository";
@@ -65,7 +65,6 @@ const REMINDER_OFFSETS: Record<string, number> = {
 };
 
 export function useAppointment(appointmentId: string, patientId: string) {
-  const auth = useAuth();
   const db = useDb();
   const appointmentRepo = useMemo(() => new AppointmentRepository(db), [db]);
   const medicationRepo = useMemo(() => new MedicationRepository(db), [db]);
@@ -100,6 +99,10 @@ export function useAppointment(appointmentId: string, patientId: string) {
   const [checkingConflict, setCheckingConflict] = useState(false);
   const [addingMedication, setAddingMedication] = useState(false);
   const [creatingAppointment, setCreatingAppointment] = useState(false);
+  // In-flight flags live in refs: a state flag is read from a stale closure when
+  // two submits come from the same render, and both would pass.
+  const medicationInFlight = useRef(false);
+  const appointmentInFlight = useRef(false);
   const [deleteMedicationId, setDeleteMedicationId] = useState<string | null>(null);
   const [medicationForm, setMedicationForm] = useState<MedicationFormData>({
     ...EMPTY_MEDICATION_FORM,
@@ -133,6 +136,16 @@ export function useAppointment(appointmentId: string, patientId: string) {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  // Reload only the diagnosis list. fetchData would also reset the notes and
+  // status fields and discard what the doctor typed but has not saved yet.
+  const refreshMedications = useCallback(async () => {
+    try {
+      setMedications((await medicationRepo.getByAppointment(appointmentId)) || []);
+    } catch {
+      toast.error("Tanılar yüklenemedi");
+    }
+  }, [appointmentId, medicationRepo]);
 
   // Real-time conflict check for new appointment
   useEffect(() => {
@@ -192,13 +205,16 @@ export function useAppointment(appointmentId: string, patientId: string) {
   const addMedication = useCallback(
     async (e?: React.FormEvent) => {
       e?.preventDefault();
-      if (addingMedication) return;
+      // Ignore submits that arrive while a create is running or while the dialog
+      // is already closing (Radix keeps it on screen for the exit animation).
+      if (medicationInFlight.current || !isMedicationDialogOpenRaw) return;
 
       if (!medicationForm.medication_name.trim()) {
         toast.error("Tanı boş olamaz");
         return;
       }
 
+      medicationInFlight.current = true;
       setAddingMedication(true);
       try {
         await medicationRepo.create({
@@ -210,15 +226,22 @@ export function useAppointment(appointmentId: string, patientId: string) {
 
         toast.success("Tanı eklendi");
         setIsMedicationDialogOpen(false);
-        setMedicationForm({ ...EMPTY_MEDICATION_FORM });
-        fetchData();
+        refreshMedications();
       } catch (error: unknown) {
         toast.error(error instanceof Error ? error.message : "Tanı eklenemedi");
       } finally {
+        medicationInFlight.current = false;
         setAddingMedication(false);
       }
     },
-    [appointmentId, medicationForm, medicationRepo, fetchData, addingMedication]
+    [
+      appointmentId,
+      medicationForm,
+      medicationRepo,
+      refreshMedications,
+      isMedicationDialogOpenRaw,
+      setIsMedicationDialogOpen,
+    ]
   );
 
   const deleteMedication = useCallback(
@@ -226,23 +249,26 @@ export function useAppointment(appointmentId: string, patientId: string) {
       try {
         await medicationRepo.delete(id);
         toast.success("Tanı silindi");
-        fetchData();
+        refreshMedications();
       } catch {
         toast.error("Tanı silinemedi");
       }
     },
-    [medicationRepo, fetchData]
+    [medicationRepo, refreshMedications]
   );
 
   const createNewAppointment = useCallback(
     async (e?: React.FormEvent) => {
       e?.preventDefault();
-      if (creatingAppointment) return;
+      if (appointmentInFlight.current || !isNewAppointmentDialogOpenRaw) return;
 
+      appointmentInFlight.current = true;
       setCreatingAppointment(true);
       try {
-        const user = await auth.getUser();
-        if (!user) throw new Error("Kullanıcı bulunamadı");
+        // The doctor is the owner of the open local database. The former
+        // auth.getUser() call was a network request to the Auth server.
+        const doctorId = db.getCurrentUserId();
+        if (!doctorId) throw new Error("Kullanıcı bulunamadı");
 
         const appointmentDateTime = new Date(
           `${newAppointmentForm.appointment_date}T${newAppointmentForm.appointment_time}`
@@ -268,7 +294,7 @@ export function useAppointment(appointmentId: string, patientId: string) {
         }
 
         const appointmentData = await appointmentRepo.create({
-          doctor_id: user.id,
+          doctor_id: doctorId,
           patient_id: patientId,
           appointment_date: appointmentDateTime.toISOString(),
           duration_minutes: durationMinutes,
@@ -290,14 +316,22 @@ export function useAppointment(appointmentId: string, patientId: string) {
 
         toast.success("Yeni randevu oluşturuldu");
         setIsNewAppointmentDialogOpen(false);
-        setNewAppointmentForm({ ...DEFAULT_NEW_APPOINTMENT_FORM });
       } catch (error: unknown) {
         toast.error(error instanceof Error ? error.message : "Randevu oluşturulamadı");
       } finally {
+        appointmentInFlight.current = false;
         setCreatingAppointment(false);
       }
     },
-    [auth, newAppointmentForm, patientId, db, appointmentRepo, reminderRepo, creatingAppointment]
+    [
+      newAppointmentForm,
+      patientId,
+      db,
+      appointmentRepo,
+      reminderRepo,
+      isNewAppointmentDialogOpenRaw,
+      setIsNewAppointmentDialogOpen,
+    ]
   );
 
   return {
