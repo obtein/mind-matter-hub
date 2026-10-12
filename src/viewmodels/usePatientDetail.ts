@@ -200,10 +200,7 @@ export function usePatientDetail(patientId: string) {
           toast.error("Geçersiz tarih veya saat formatı");
           return;
         }
-        if (appointmentDateTime < new Date()) {
-          toast.error("Geçmiş tarih için randevu oluşturulamaz");
-          return;
-        }
+        // Past times are allowed on purpose: sessions are recorded after they take place.
         const durationMinutes = parseInt(formData.duration_minutes);
 
         // Check for conflicts
