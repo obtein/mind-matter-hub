@@ -100,6 +100,9 @@ async function uploadAllLocal(
         sample: result.failed.slice(0, 5),
       });
     }
+    if (result.sanitized > 0) {
+      remoteLog.warn(`Sync sanitized dates: ${table}`, { sanitized: result.sanitized });
+    }
     results.push(result);
   }
   return results;
@@ -232,6 +235,7 @@ export async function syncFromSupabase(
 
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
+      clearTimeout(timeoutId);
       return { success: false, message: "Önce giriş yapın" };
     }
     const userId = user.id;
@@ -242,6 +246,7 @@ export async function syncFromSupabase(
     // 1. Pull: rows missing locally, or strictly newer in the cloud
     let addedToLocal = 0;
     let updatedLocal = 0;
+    let pullFailed = 0;
 
     for (let i = 0; i < tables.length; i++) {
       if (controller.signal.aborted) throw new DOMException("Sync aborted", "AbortError");
@@ -262,6 +267,7 @@ export async function syncFromSupabase(
           if (local) updatedLocal++;
           else addedToLocal++;
         } catch (err) {
+          pullFailed++;
           const errMsg = err instanceof Error ? err.message : String(err);
           console.error(`Failed to write ${t.name} record locally:`, errMsg);
           remoteLog.error(`Sync insert failed: ${t.name}`, {
@@ -302,11 +308,12 @@ export async function syncFromSupabase(
       ? ` Uyarı: bazı tablolarda lokalde eksik kayıt var: ${verification.join(", ")}`
       : "";
     const pullMsg = `Lokale ${addedToLocal} yeni, ${updatedLocal} güncellenen kayıt alındı.`;
+    const pullFailMsg = pullFailed > 0 ? ` ${pullFailed} sunucu kaydı lokale yazılamadı.` : "";
 
-    if (!upload.ok) {
+    if (!upload.ok || pullFailed > 0) {
       return {
         success: false,
-        message: `Senkronizasyon eksik kaldı. ${pullMsg} ${upload.message}${verifyMsg}`,
+        message: `Senkronizasyon eksik kaldı. ${pullMsg}${pullFailMsg} ${upload.message}${verifyMsg}`,
       };
     }
     return {

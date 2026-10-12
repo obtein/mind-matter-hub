@@ -86,6 +86,8 @@ export interface UploadResult {
   table: string;
   attempted: number;
   uploaded: number;
+  /** Rows in which at least one date field was nulled by sanitizeRow before sending. */
+  sanitized: number;
   failed: RowFailure[];
 }
 
@@ -106,16 +108,28 @@ async function postRows(
   rows: Row[],
   headers: Record<string, string>,
   signal?: AbortSignal
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<{ ok: boolean; status: number; error?: string }> {
   const res = await fetchImpl(`${url}/rest/v1/${table}`, {
     method: "POST",
     headers: { ...headers, Prefer: "resolution=merge-duplicates,return=minimal" },
     body: JSON.stringify(rows),
     signal,
   });
-  if (res.ok) return { ok: true };
+  if (res.ok) return { ok: true, status: res.status };
   const text = await res.text().catch(() => "");
-  return { ok: false, error: `${res.status} ${text}`.trim() };
+  return { ok: false, status: res.status, error: `${res.status} ${text}`.trim() };
+}
+
+/**
+ * Auth, rate-limit and server errors are not caused by one row; retrying each row alone
+ * would only multiply the requests.
+ */
+function isRowIndependentFailure(status: number): boolean {
+  return status === 401 || status === 403 || status === 429 || status >= 500;
+}
+
+function wasSanitized(original: Row, safe: Row): boolean {
+  return Object.keys(original).some((k) => original[k] != null && safe[k] === null);
 }
 
 /**
@@ -127,10 +141,14 @@ export async function uploadRows(opts: UploadOptions): Promise<UploadResult> {
   const { table, rows, url, headers, signal } = opts;
   const fetchImpl = opts.fetchImpl ?? fetch;
   const size = opts.chunkSize ?? 200;
-  const result: UploadResult = { table, attempted: rows.length, uploaded: 0, failed: [] };
+  const result: UploadResult = { table, attempted: rows.length, uploaded: 0, sanitized: 0, failed: [] };
   if (rows.length === 0) return result;
 
-  const safeRows = rows.map(sanitizeRow);
+  const safeRows = rows.map((row) => {
+    const safe = sanitizeRow(row);
+    if (wasSanitized(row, safe)) result.sanitized += 1;
+    return safe;
+  });
   for (const batch of chunk(safeRows, size)) {
     if (signal?.aborted) throw new DOMException("Upload aborted", "AbortError");
     const batchRes = await postRows(fetchImpl, url, table, batch, headers, signal);
@@ -138,8 +156,10 @@ export async function uploadRows(opts: UploadOptions): Promise<UploadResult> {
       result.uploaded += batch.length;
       continue;
     }
-    if (batch.length === 1) {
-      result.failed.push({ id: idOf(batch[0]), error: batchRes.error ?? "unknown error" });
+    if (batch.length === 1 || isRowIndependentFailure(batchRes.status)) {
+      for (const row of batch) {
+        result.failed.push({ id: idOf(row), error: batchRes.error ?? "unknown error" });
+      }
       continue;
     }
     for (const row of batch) {
@@ -181,14 +201,18 @@ function toTime(v: unknown): number | null {
 
 /** Human-readable (Turkish) summary of an upload run, used in toasts and logs. */
 export function summarizeUploads(results: UploadResult[]): { ok: boolean; message: string } {
+  const sanitized = results.reduce((n, r) => n + r.sanitized, 0);
+  const sanitizedMsg = sanitized > 0
+    ? ` ${sanitized} kayıtta geçersiz tarih boş olarak gönderildi; lütfen bu kayıtları düzeltin.`
+    : "";
   const failed = results.filter((r) => r.failed.length > 0);
   if (failed.length === 0) {
     const total = results.reduce((n, r) => n + r.uploaded, 0);
-    return { ok: true, message: `Veriler yedeklendi (${total} kayıt).` };
+    return { ok: true, message: `Veriler yedeklendi (${total} kayıt).${sanitizedMsg}` };
   }
   const parts = failed.map((r) => `${r.table}: ${r.failed.length}/${r.attempted}`);
   return {
     ok: false,
-    message: `Yedekleme eksik kaldı. Gönderilemeyen kayıtlar: ${parts.join(", ")}.`,
+    message: `Yedekleme eksik kaldı. Gönderilemeyen kayıtlar: ${parts.join(", ")}.${sanitizedMsg}`,
   };
 }

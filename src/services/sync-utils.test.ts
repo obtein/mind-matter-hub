@@ -83,14 +83,14 @@ describe("chunk", () => {
 type Call = { body: unknown[]; prefer: string | undefined };
 
 /** fetch stub: a batch fails when it contains a row whose id is in `badIds`. */
-function fakeFetch(badIds: Set<string>, calls: Call[]): typeof fetch {
+function fakeFetch(badIds: Set<string>, calls: Call[], failStatus = 400): typeof fetch {
   return (async (_url: RequestInfo | URL, init?: RequestInit) => {
     const body = JSON.parse(String(init?.body)) as Array<{ id: string }>;
     const headers = init?.headers as Record<string, string>;
     calls.push({ body, prefer: headers?.Prefer });
     const bad = body.some((r) => badIds.has(r.id));
     return bad
-      ? new Response('{"code":"22009","message":"time zone displacement out of range"}', { status: 400 })
+      ? new Response('{"code":"22009","message":"time zone displacement out of range"}', { status: failStatus })
       : new Response(null, { status: 201 });
   }) as typeof fetch;
 }
@@ -102,9 +102,35 @@ describe("uploadRows", () => {
     const calls: Call[] = [];
     const rows = [{ id: "a" }, { id: "b" }];
     const res = await uploadRows({ table: "patients", rows, url: "http://x", headers, fetchImpl: fakeFetch(new Set(), calls) });
-    expect(res).toEqual({ table: "patients", attempted: 2, uploaded: 2, failed: [] });
+    expect(res).toEqual({ table: "patients", attempted: 2, uploaded: 2, sanitized: 0, failed: [] });
     expect(calls).toHaveLength(1);
     expect(calls[0].prefer).toContain("resolution=merge-duplicates");
+  });
+
+  it("counts rows whose date had to be nulled, and still uploads them", async () => {
+    const calls: Call[] = [];
+    const rows = [{ id: "a", date_of_birth: new Date(20022, 9, 1) }, { id: "b", date_of_birth: "1985-03-10" }, { id: "c", date_of_birth: null }];
+    const res = await uploadRows({ table: "patients", rows, url: "http://x", headers, fetchImpl: fakeFetch(new Set(), calls) });
+    expect(res.uploaded).toBe(3);
+    expect(res.sanitized).toBe(1);
+  });
+
+  it("does not retry row by row on auth, rate-limit or server errors", async () => {
+    for (const status of [401, 429, 500, 503]) {
+      const calls: Call[] = [];
+      const rows = [{ id: "a" }, { id: "b" }, { id: "c" }];
+      const res = await uploadRows({
+        table: "patients",
+        rows,
+        url: "http://x",
+        headers,
+        fetchImpl: fakeFetch(new Set(["a", "b", "c"]), calls, status),
+      });
+      expect(calls, `status ${status}`).toHaveLength(1);
+      expect(res.uploaded).toBe(0);
+      expect(res.failed).toHaveLength(3);
+      expect(res.failed[0].error).toContain(String(status));
+    }
   });
 
   it("isolates one bad row instead of losing the whole batch (the 2026 production failure)", async () => {
@@ -188,17 +214,25 @@ describe("shouldOverwriteLocal", () => {
 describe("summarizeUploads", () => {
   it("reports success with the total", () => {
     const s = summarizeUploads([
-      { table: "patients", attempted: 2, uploaded: 2, failed: [] },
-      { table: "appointments", attempted: 3, uploaded: 3, failed: [] },
+      { table: "patients", attempted: 2, uploaded: 2, sanitized: 0, failed: [] },
+      { table: "appointments", attempted: 3, uploaded: 3, sanitized: 0, failed: [] },
     ]);
     expect(s.ok).toBe(true);
     expect(s.message).toContain("5");
+    expect(s.message).not.toContain("geçersiz tarih");
   });
   it("reports failure per table, never success", () => {
     const s = summarizeUploads([
-      { table: "patients", attempted: 468, uploaded: 467, failed: [{ id: "p", error: "22009" }] },
+      { table: "patients", attempted: 468, uploaded: 467, sanitized: 0, failed: [{ id: "p", error: "22009" }] },
     ]);
     expect(s.ok).toBe(false);
     expect(s.message).toContain("patients: 1/468");
+  });
+  it("tells the user when dates were nulled, even on success", () => {
+    const s = summarizeUploads([
+      { table: "patients", attempted: 468, uploaded: 468, sanitized: 1, failed: [] },
+    ]);
+    expect(s.ok).toBe(true);
+    expect(s.message).toContain("1 kayıtta geçersiz tarih");
   });
 });
