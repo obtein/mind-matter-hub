@@ -183,7 +183,7 @@ export async function importBackup(buffer: ArrayBuffer, password: string): Promi
 // ── Platform detection ──
 
 function isTauri(): boolean {
-  return !!(window as any).__TAURI_INTERNALS__;
+  return "__TAURI_INTERNALS__" in window;
 }
 
 // ── File helpers ──

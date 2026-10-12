@@ -1,73 +1,80 @@
-# Welcome to your Lovable project
+# PsiTrak — Hasta Takip Sistemi
 
-## Project info
+Desktop patient-tracking application for a psychiatry practice. Windows app built with
+Tauri v2; the UI is React + Vite + shadcn/Tailwind. All patient data lives in a local
+PGlite (Postgres-in-WebAssembly) database on the device and is mirrored to Supabase as a
+cloud copy. The UI is Turkish.
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+## Architecture
 
-## How can I edit this code?
+| Layer | Where | Notes |
+|---|---|---|
+| UI | `src/pages`, `src/components/dashboard` | Views: daily schedule, patients, patient detail, appointment detail, statistics, medication report |
+| View models | `src/viewmodels` | One hook per view; all mutations go through repositories |
+| Repositories | `src/repositories` | Thin pass-throughs to the `DbService` |
+| Local database | `src/services/db.pglite.ts`, `src/services/pglite/` | PGlite in IndexedDB, one database per user (`idb://psitrak_{userId}`). Schema in `pglite/schema.sql`, startup migrations in `pglite/init.ts` |
+| Auth | `src/services/auth.supabase.ts` | Supabase Auth, email + password |
+| Cloud sync | `src/services/supabase-sync.ts`, `src/services/sync-utils.ts` | See below |
+| Device services | `src/services/heartbeat.ts`, `command-listener.ts`, `remote-logger.ts` | Heartbeat every 2 min, admin command polling every 30 s, error log to `app_logs` |
+| Desktop host | `src-tauri/` | Tauri v2, single instance, autostart, updater, silent-update scheduled task (`lib.rs`) |
+| Updates | `.github/workflows/build-desktop.yml` | Tag `v*` builds, signs and publishes a GitHub Release with `latest.json`; the app polls it on start |
 
-There are several ways of editing your application.
+The admin console lives in a separate repository: `obtein/mind-matter-hub-admin`.
 
-**Use Lovable**
+### Sync model
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
+The device is the primary copy. Supabase is the cloud copy.
 
-Changes made via Lovable will be committed automatically to this repo.
+- `syncToSupabase()` pushes every local row (on window close and on logout).
+- `syncFromSupabase()` pulls rows that are missing locally or strictly newer in the cloud
+  (by `updated_at`), then pushes every local row. Runs on first start, after a failed
+  close-sync (`psitrak_pending_sync`), and from the "Verileri Senkronize Et" button.
+- Uploads go in chunks of 200. A failing chunk is retried row by row, so one bad record
+  never blocks the rest. Failures are reported to the user and logged to `app_logs`.
+- Date values are normalised in `sync-utils.ts` (`sanitizeRow`): Postgres accepts years
+  1..9999 only; anything else becomes `null`.
 
-**Use your preferred IDE**
-
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
+## Development
 
 ```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
+npm ci
+npm run dev            # web build on http://localhost:8080
+npm run dev:desktop    # Tauri window (needs Rust toolchain)
+npm run typecheck
+npm run lint
+npm test               # vitest, unit tests for sync and validation helpers
 ```
 
-**Edit a file directly in GitHub**
+Environment variables (`.env`, Vite-prefixed):
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+```
+VITE_SUPABASE_PROJECT_ID=...
+VITE_SUPABASE_PUBLISHABLE_KEY=...   # anon key; public by design, access is enforced by RLS
+VITE_SUPABASE_URL=https://....supabase.co
+```
 
-**Use GitHub Codespaces**
+## Release procedure
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+1. Bump the version in **all three** files: `package.json`, `src-tauri/tauri.conf.json`,
+   `src-tauri/Cargo.toml` (and `src-tauri/Cargo.lock`, package `app`).
+2. Commit, then tag `vX.Y.Z` and push the tag.
+3. The workflow verifies that the tag equals the version files, runs type-check, lint
+   and tests, builds and signs the MSI, and publishes the release with `latest.json`.
+4. Installed clients pick the update up on their next start.
 
-## What technologies are used for this project?
+Never reuse a tag. A tag whose version does not match the files is rejected by CI
+(a mismatch republished into an old release once, on 2026-04-13).
 
-This project is built with:
+## Supabase
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+Project `vhdhwnvfomwzauvqozxo`. See `supabase/README.md` for the schema history and the
+policy migration that must be applied by hand.
 
-## How can I deploy this project?
+## Known limits
 
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
-
-## Can I connect a custom domain to my Lovable project?
-
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+- `appointment_reminders` rows are written but never sent; in-app reminders use a fixed
+  24-hour window (`NotificationBell.tsx`).
+- The silent-update path (`src-tauri/src/lib.rs`) installs the downloaded MSI through a
+  scheduled task without verifying its signature. The fallback path through
+  `tauri-plugin-updater` does verify.
+- `fs:scope` in `src-tauri/capabilities/default.json` is the whole filesystem.

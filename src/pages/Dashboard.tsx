@@ -115,6 +115,8 @@ const Dashboard = () => {
             if (result.success) {
               safeRemoveItem("psitrak_pending_sync");
               toast.success(result.message);
+            } else {
+              toast.error(result.message, { duration: 10000 });
             }
           }
         } catch (syncErr) {

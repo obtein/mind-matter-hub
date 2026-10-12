@@ -1,11 +1,12 @@
 /**
- * Command Listener — Master'dan gelen komutları dinler ve çalıştırır.
- * Her 30 saniyede bir pending komut kontrol eder.
+ * Command listener — polls admin_commands every 30 seconds and executes pending
+ * commands addressed to this user (or to everyone). Requests carry the user's own
+ * session token; row-level security decides what this user may read and update.
  */
-import { LocalAuthService } from "@/services/auth.local";
+import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
-const CHECK_INTERVAL = 30 * 1000; // 30 saniye
+const CHECK_INTERVAL = 30 * 1000; // 30 seconds
 let intervalId: ReturnType<typeof setInterval> | null = null;
 
 const SYNC_URL = import.meta.env.VITE_SUPABASE_URL;
@@ -15,7 +16,7 @@ interface AdminCommand {
   id: string;
   target_user_id: string | null;
   command_type: string;
-  payload: Record<string, unknown>;
+  payload: Record<string, unknown> | null;
   status: string;
   created_at: string;
 }
@@ -24,32 +25,31 @@ const MAX_COMMAND_AGE_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 async function checkCommands(): Promise<void> {
   try {
-    const auth = new LocalAuthService();
-    const user = await auth.getUser();
-    if (!user) return;
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return;
+    const userId = session.user.id;
 
     const headers = {
       apikey: SYNC_KEY,
-      Authorization: `Bearer ${SYNC_KEY}`,
+      Authorization: `Bearer ${session.access_token}`,
       "Content-Type": "application/json",
     };
 
-    // Pending komutları çek (bu kullanıcıya veya herkese)
-    const url = `${SYNC_URL}/rest/v1/admin_commands?status=eq.pending&or=(target_user_id.eq.${user.id},target_user_id.is.null)&order=created_at.asc`;
+    const url =
+      `${SYNC_URL}/rest/v1/admin_commands?status=eq.pending` +
+      `&or=(target_user_id.eq.${encodeURIComponent(userId)},target_user_id.is.null)` +
+      `&order=created_at.asc`;
     const res = await fetch(url, { headers });
     if (!res.ok) return;
 
     const commands: AdminCommand[] = await res.json();
 
     for (const cmd of commands) {
-      // Verify the command status is actually 'pending' (defense-in-depth)
       if (cmd.status !== "pending") continue;
 
-      // Skip expired commands (older than 24 hours)
       const commandAge = Date.now() - new Date(cmd.created_at).getTime();
       if (commandAge > MAX_COMMAND_AGE_MS) {
-        // Mark expired commands so they aren't re-checked
-        await fetch(`${SYNC_URL}/rest/v1/admin_commands?id=eq.${cmd.id}`, {
+        await fetch(`${SYNC_URL}/rest/v1/admin_commands?id=eq.${encodeURIComponent(cmd.id)}`, {
           method: "PATCH",
           headers: { ...headers, Prefer: "return=minimal" },
           body: JSON.stringify({ status: "expired" }),
@@ -59,8 +59,7 @@ async function checkCommands(): Promise<void> {
 
       await executeCommand(cmd);
 
-      // Komutu executed olarak işaretle
-      await fetch(`${SYNC_URL}/rest/v1/admin_commands?id=eq.${cmd.id}`, {
+      await fetch(`${SYNC_URL}/rest/v1/admin_commands?id=eq.${encodeURIComponent(cmd.id)}`, {
         method: "PATCH",
         headers: { ...headers, Prefer: "return=minimal" },
         body: JSON.stringify({ status: "executed", executed_at: new Date().toISOString() }),
@@ -73,7 +72,7 @@ async function checkCommands(): Promise<void> {
 
 async function executeCommand(cmd: AdminCommand): Promise<void> {
   switch (cmd.command_type) {
-    case "force_update":
+    case "force_update": {
       toast.info("Yönetici güncelleme isteği gönderdi. Güncelleme kontrol ediliyor...");
       try {
         const { check } = await import("@tauri-apps/plugin-updater");
@@ -88,13 +87,15 @@ async function executeCommand(cmd: AdminCommand): Promise<void> {
         console.warn("Force update failed — not in Tauri or no update available");
       }
       break;
+    }
 
-    case "show_message":
-      const message = (cmd.payload?.message as string) || "Yöneticiden mesaj";
+    case "show_message": {
+      const message = typeof cmd.payload?.message === "string" ? cmd.payload.message : "Yöneticiden mesaj";
       toast.info(message, { duration: 10000 });
       break;
+    }
 
-    case "restart":
+    case "restart": {
       try {
         const { relaunch } = await import("@tauri-apps/plugin-process");
         await relaunch();
@@ -102,6 +103,7 @@ async function executeCommand(cmd: AdminCommand): Promise<void> {
         window.location.reload();
       }
       break;
+    }
 
     default:
       console.warn("Unknown command:", cmd.command_type);
@@ -110,7 +112,7 @@ async function executeCommand(cmd: AdminCommand): Promise<void> {
 
 export function startCommandListener(): void {
   if (intervalId) return;
-  checkCommands(); // İlk kontrol hemen
+  void checkCommands();
   intervalId = setInterval(checkCommands, CHECK_INTERVAL);
 }
 

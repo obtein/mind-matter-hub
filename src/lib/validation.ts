@@ -1,30 +1,33 @@
-/**
- * Validates Turkish TC Identity Number using checksum algorithm
- * TC identity numbers are 11 digits, starting with a non-zero digit
- */
-export function isValidTCIdentity(tc: string): boolean {
-  // Must be exactly 11 digits and not start with 0
-  if (!/^[1-9]\d{10}$/.test(tc)) return false;
+/** Input validation shared by the patient forms. Pure functions, unit-tested. */
 
-  const digits = tc.split("").map(Number);
+export const MIN_BIRTH_YEAR = 1900;
 
-  // First checksum: ((sum of odd positions * 7) - sum of even positions) mod 10 = 10th digit
-  const sum1 = (digits[0] + digits[2] + digits[4] + digits[6] + digits[8]) * 7;
-  const sum2 = digits[1] + digits[3] + digits[5] + digits[7];
-  const check1 = (sum1 - sum2) % 10;
-
-  if (check1 !== digits[9]) return false;
-
-  // Second checksum: sum of first 10 digits mod 10 = 11th digit
-  const sum3 = digits.slice(0, 10).reduce((a, b) => a + b, 0);
-  const check2 = sum3 % 10;
-
-  return check2 === digits[10];
+export function validatePhone(phone: string): boolean {
+  if (!phone) return true;
+  return /^[0-9\s\-+()]{6,20}$/.test(phone);
 }
 
 /**
- * Format TC identity input - only allow digits
+ * Returns a Turkish error message, or null when the value is acceptable.
+ * Empty is allowed (birth date is optional). The year must be between 1900 and today,
+ * so a typo such as 20022 can never reach the database again.
  */
-export function formatTCIdentity(value: string): string {
-  return value.replace(/\D/g, "").slice(0, 11);
+export function validateDateOfBirth(dob: string, today: Date = new Date()): string | null {
+  if (!dob) return null;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dob)) return "Geçersiz doğum tarihi";
+
+  const year = Number(dob.slice(0, 4));
+  const currentYear = today.getFullYear();
+  if (year < MIN_BIRTH_YEAR || year > currentYear) {
+    return `Doğum yılı ${MIN_BIRTH_YEAR} ile ${currentYear} arasında olmalıdır`;
+  }
+
+  const parsed = new Date(`${dob}T00:00:00Z`);
+  if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== dob) {
+    return "Geçersiz doğum tarihi";
+  }
+  if (dob > today.toISOString().slice(0, 10)) {
+    return "Doğum tarihi gelecekte olamaz";
+  }
+  return null;
 }

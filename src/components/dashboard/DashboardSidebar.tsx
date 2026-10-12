@@ -41,8 +41,11 @@ export const DashboardSidebar = ({ viewState, setViewState, user }: DashboardSid
       const { hasSyncCredentials, syncToSupabase } = await import("@/services/supabase-sync");
       if (await hasSyncCredentials()) {
         toast.info("Veriler yedekleniyor...", { id: "logout-sync" });
-        await syncToSupabase();
+        const result = await syncToSupabase();
         toast.dismiss("logout-sync");
+        if (!result.success) {
+          toast.warning(result.message, { duration: 10000 });
+        }
       }
       const { closePGlite } = await import("@/services/pglite/init");
       await closePGlite();
@@ -134,7 +137,7 @@ export const DashboardSidebar = ({ viewState, setViewState, user }: DashboardSid
         </SidebarMenuButton>
         {!IS_TAURI && (
           <SidebarMenuButton asChild className="w-full mb-2">
-            <a href="/PsiTrak_0.4.2_x64_en-US.msi" download>
+            <a href="https://github.com/obtein/mind-matter-hub/releases/latest" target="_blank" rel="noreferrer">
               <Monitor className="w-5 h-5" />
               <span>Masaüstü Uygulamayı İndir</span>
             </a>

@@ -1,7 +1,11 @@
 /**
- * Remote Logger — Kritik hataları Supabase'e gönderir.
- * Uygulama crash olsa bile hata kaydı Supabase'de kalır.
+ * Remote logger — sends warnings and errors to the Supabase app_logs table so that a
+ * crash on the device still leaves a trace the admin can read.
+ * Uses the user's session token when logged in; falls back to the anon key before login
+ * (the table allows anonymous inserts for exactly this case).
  */
+import { IS_TAURI } from "@/lib/platform";
+import { supabase } from "@/integrations/supabase/client";
 
 const SYNC_URL = import.meta.env.VITE_SUPABASE_URL;
 const SYNC_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
@@ -9,7 +13,9 @@ const SYNC_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 let appVersion = "unknown";
 try {
   appVersion = __APP_VERSION__;
-} catch { /* vite define olmayabilir */ }
+} catch {
+  /* vite define may be absent */
+}
 
 type LogLevel = "error" | "warn" | "info";
 
@@ -22,58 +28,53 @@ interface LogEntry {
   platform?: string;
 }
 
+async function sessionInfo(): Promise<{ token: string | null; email: string | undefined }> {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    return { token: session?.access_token ?? null, email: session?.user?.email };
+  } catch {
+    return { token: null, email: undefined };
+  }
+}
+
 async function sendLog(entry: LogEntry): Promise<void> {
   try {
+    const { token, email } = await sessionInfo();
     await fetch(`${SYNC_URL}/rest/v1/app_logs`, {
       method: "POST",
       headers: {
         apikey: SYNC_KEY,
-        Authorization: `Bearer ${SYNC_KEY}`,
+        Authorization: `Bearer ${token ?? SYNC_KEY}`,
         "Content-Type": "application/json",
         Prefer: "return=minimal",
       },
       body: JSON.stringify({
         ...entry,
+        user_email: entry.user_email ?? email,
         app_version: entry.app_version || appVersion,
-        platform: entry.platform || (typeof window !== "undefined" && (window as any).__TAURI__ ? "desktop" : "web"),
+        platform: entry.platform || (IS_TAURI ? "desktop" : "web"),
       }),
     });
   } catch {
-    // Log gönderimi başarısız — sessizce geç, döngüye girme
+    // Logging must never throw or loop
   }
-}
-
-function getUserEmail(): string | undefined {
-  try {
-    // Lokal auth session'dan email al
-    const sessionRaw = localStorage.getItem("psitrak_local_session");
-    if (sessionRaw) return sessionRaw; // userId stored, try email from DB
-
-    // Fallback: Supabase auth token
-    const raw = localStorage.getItem("sb-vhdhwnvfomwzauvqozxo-auth-token");
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      return parsed?.user?.email;
-    }
-  } catch { /* */ }
-  return undefined;
 }
 
 export const remoteLog = {
   error(message: string, context?: Record<string, unknown>) {
     console.error("[RemoteLog]", message, context);
-    sendLog({ level: "error", message, context, user_email: getUserEmail() });
+    void sendLog({ level: "error", message, context });
   },
   warn(message: string, context?: Record<string, unknown>) {
     console.warn("[RemoteLog]", message, context);
-    sendLog({ level: "warn", message, context, user_email: getUserEmail() });
+    void sendLog({ level: "warn", message, context });
   },
   info(message: string, context?: Record<string, unknown>) {
-    sendLog({ level: "info", message, context, user_email: getUserEmail() });
+    void sendLog({ level: "info", message, context });
   },
 };
 
-// Global hata yakalayıcı — yakalanmayan hatalar otomatik loglanır
+// Global handlers — uncaught errors are logged automatically
 if (typeof window !== "undefined") {
   window.addEventListener("error", (event) => {
     remoteLog.error(`Uncaught: ${event.message}`, {
@@ -84,8 +85,9 @@ if (typeof window !== "undefined") {
   });
 
   window.addEventListener("unhandledrejection", (event) => {
-    remoteLog.error(`Unhandled Promise: ${event.reason}`, {
-      stack: event.reason?.stack?.substring(0, 500),
+    const reason: unknown = event.reason;
+    remoteLog.error(`Unhandled Promise: ${String(reason)}`, {
+      stack: reason instanceof Error ? reason.stack?.substring(0, 500) : undefined,
     });
   });
 }

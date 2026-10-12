@@ -16,12 +16,29 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
-          node-version: "20"
+          node-version: "22"
+          cache: npm
+
+      # A tag that does not match the version files would republish into an OLD release
+      # (this happened with v0.7.5 on 2026-04-13). Fail fast instead.
+      - name: Verify that the tag matches every version file
+        if: github.ref_type == 'tag'
+        shell: bash
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          PKG=$(node -p "require('./package.json').version")
+          CONF=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          CARGO=$(grep -m1 '^version = ' src-tauri/Cargo.toml | sed -E 's/.*"([^"]+)".*/\1/')
+          echo "tag=$TAG package.json=$PKG tauri.conf.json=$CONF Cargo.toml=$CARGO"
+          if [ "$TAG" != "$PKG" ] || [ "$TAG" != "$CONF" ] || [ "$TAG" != "$CARGO" ]; then
+            echo "::error::Tag v$TAG does not match the version files. Bump package.json, src-tauri/tauri.conf.json and src-tauri/Cargo.toml together, then tag again."
+            exit 1
+          fi
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -34,7 +51,13 @@ jobs:
           workspaces: "src-tauri -> target"
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
+
+      - name: Type-check, lint and test
+        run: |
+          npm run typecheck
+          npm run lint
+          npm test
 
       - name: Build Tauri app
         uses: tauri-apps/tauri-action@v0

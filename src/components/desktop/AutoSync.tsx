@@ -26,7 +26,7 @@ export const AutoSync = () => {
 
               try {
                 const result = await Promise.race([
-                  syncToSupabase(),
+                  syncToSupabase(controller.signal),
                   new Promise<{ success: false; message: string }>((_, reject) => {
                     controller.signal.addEventListener("abort", () =>
                       reject(new Error("Sync timeout"))

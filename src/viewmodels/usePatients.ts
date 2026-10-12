@@ -4,6 +4,7 @@ import { PatientRepository } from "@/repositories/PatientRepository";
 import type { Patient, PatientInsert } from "@/services/db";
 import { toast } from "sonner";
 import { handleError } from "@/lib/errorHandler";
+import { validateDateOfBirth, validatePhone } from "@/lib/validation";
 
 export interface PatientFormData {
   full_name: string;
@@ -101,11 +102,6 @@ export function usePatients() {
     setIsDialogOpen(true);
   }, []);
 
-  const validatePhone = (phone: string): boolean => {
-    if (!phone) return true;
-    return /^[0-9\s\-+()]{6,20}$/.test(phone);
-  };
-
   const submitPatient = useCallback(async () => {
     if (submitting) return false;
 
@@ -115,6 +111,11 @@ export function usePatients() {
     }
     if (!validatePhone(formData.phone)) {
       toast.error("Geçersiz telefon numarası");
+      return false;
+    }
+    const dobError = validateDateOfBirth(formData.date_of_birth);
+    if (dobError) {
+      toast.error(dobError);
       return false;
     }
 

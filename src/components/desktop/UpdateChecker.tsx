@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { IS_TAURI } from "@/lib/platform";
 import { toast } from "sonner";
 import { safeGetItem, safeSetItem } from "@/lib/storage";
+import type { Update } from "@tauri-apps/plugin-updater";
 
 /**
  * UpdateChecker - Handles automatic updates for the desktop (Tauri) app.
@@ -48,9 +49,9 @@ export const UpdateChecker = () => {
                     id: "task-setup",
                     duration: 3000,
                   });
-                } catch (err: any) {
+                } catch (err: unknown) {
                   // Task already exists or creation failed — either way, don't ask again
-                  const msg = String(err?.message || err || "");
+                  const msg = err instanceof Error ? err.message : String(err ?? "");
                   if (msg.toLowerCase().includes("already exists")) {
                     toast.dismiss("task-setup");
                   } else {
@@ -119,7 +120,7 @@ export const UpdateChecker = () => {
             await new Promise((resolve) => setTimeout(resolve, 3000));
             const { exit } = await import("@tauri-apps/plugin-process");
             await exit(0);
-          } catch (err: any) {
+          } catch (err: unknown) {
             // If scheduled task approach fails, fall back to direct install
             console.error("Scheduled task update failed, falling back:", err);
             toast.info("Sessiz kurulum başarısız, standart güncelleme deneniyor...", {
@@ -146,14 +147,14 @@ export const UpdateChecker = () => {
 /**
  * Fallback: use tauri-plugin-updater's downloadAndInstall() which triggers UAC each time.
  */
-async function fallbackDirectInstall(update: any) {
+async function fallbackDirectInstall(update: Update) {
   try {
     await update.downloadAndInstall();
     toast.success("Güncelleme tamamlandı. Uygulama yeniden başlatılıyor...", { id: "update" });
     const { relaunch } = await import("@tauri-apps/plugin-process");
     await relaunch();
-  } catch (err: any) {
-    toast.error("Güncelleme başarısız: " + (err?.message || "Bilinmeyen hata"), { id: "update" });
+  } catch (err: unknown) {
+    toast.error("Güncelleme başarısız: " + (err instanceof Error ? err.message : "Bilinmeyen hata"), { id: "update" });
   }
 }
 
@@ -171,7 +172,7 @@ function extractDownloadUrl(rawJson: Record<string, unknown>): string | null {
     }
     // Multi-platform format
     if (rawJson.platforms && typeof rawJson.platforms === "object") {
-      const platforms = rawJson.platforms as Record<string, any>;
+      const platforms = rawJson.platforms as Record<string, { url?: unknown }>;
       // Try common Windows target keys
       for (const key of ["windows-x86_64", "x86_64-pc-windows-msvc"]) {
         if (platforms[key]?.url) {

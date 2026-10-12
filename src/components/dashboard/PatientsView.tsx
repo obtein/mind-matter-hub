@@ -88,6 +88,8 @@ export const PatientsView = ({ onPatientSelect }: PatientsViewProps) => {
                   <Label htmlFor="date_of_birth">Doğum Tarihi</Label>
                   <Input
                     id="date_of_birth" type="date"
+                    min="1900-01-01"
+                    max={new Date().toISOString().slice(0, 10)}
                     value={vm.formData.date_of_birth}
                     onChange={(e) => vm.setFormData({ ...vm.formData, date_of_birth: e.target.value })}
                   />
