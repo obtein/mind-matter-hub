@@ -72,7 +72,17 @@ create policy heartbeats_select on public.device_heartbeats
   for select to authenticated
   using (user_id = (select auth.uid())::text or public.is_admin());
 
--- 6. patient tables: add the missing reminders UPDATE policy, then drop the duplicate ALL policies
+-- 6. patient tables: add the missing UPDATE policies (reminders, medications), then drop the duplicate ALL policies.
+--    The sync upserts with ON CONFLICT DO UPDATE, so every synced table needs an UPDATE policy.
+drop policy if exists session_meds_update on public.session_medications;
+create policy session_meds_update on public.session_medications
+  for update to authenticated
+  using (exists (select 1 from public.appointments a
+                 where a.id = session_medications.appointment_id
+                   and a.doctor_id = (auth.uid())::text))
+  with check (exists (select 1 from public.appointments a
+                      where a.id = session_medications.appointment_id
+                        and a.doctor_id = (auth.uid())::text));
 drop policy if exists reminders_update on public.appointment_reminders;
 create policy reminders_update on public.appointment_reminders
   for update to authenticated
