@@ -1,131 +1,52 @@
 use tauri::Manager;
-use std::process::Command;
-#[cfg(target_os = "windows")]
-use std::os::windows::process::CommandExt;
 
-#[cfg(target_os = "windows")]
-const CREATE_NO_WINDOW: u32 = 0x08000000;
+mod secure_update;
+mod update_verify;
 
-const TASK_NAME: &str = "PsiTrakUpdater";
+pub use secure_update::{run_apply_update_cli, APPLY_ARG};
 
-/// Helper: create a Command that hides the console window on Windows
-fn hidden_command(program: &str) -> Command {
-    let mut cmd = Command::new(program);
-    #[cfg(target_os = "windows")]
-    cmd.creation_flags(CREATE_NO_WINDOW);
-    cmd
+async fn blocking<T: Send + 'static>(f: impl FnOnce() -> T + Send + 'static) -> Result<T, String> {
+    tauri::async_runtime::spawn_blocking(f)
+        .await
+        .map_err(|e| format!("task failed: {e}"))
 }
 
-/// Check if the PsiTrakUpdater scheduled task already exists.
+/// "missing", "legacy" (pre-0.7.12 task running a %TEMP% script) or "secure".
 #[tauri::command]
-fn check_update_task_exists() -> Result<bool, String> {
-    let output = hidden_command("schtasks.exe")
-        .args(["/Query", "/TN", TASK_NAME])
-        .output()
-        .map_err(|e| format!("Failed to run schtasks: {}", e))?;
-
-    Ok(output.status.success())
+async fn update_task_status() -> Result<String, String> {
+    blocking(|| secure_update::task_status().to_string()).await
 }
 
-/// Register a Windows Scheduled Task with elevated privileges.
-/// This will trigger a one-time UAC prompt via PowerShell's Start-Process -Verb RunAs.
+/// One UAC prompt (administrator): registers the secure SYSTEM task that verifies updates itself.
 #[tauri::command]
-fn register_update_task() -> Result<String, String> {
-    if check_update_task_exists().unwrap_or(false) {
-        return Ok("Task already exists".to_string());
-    }
-
-    let updater_script = std::env::temp_dir().join("psitrak_updater.cmd");
-    let script_path = updater_script.to_string_lossy().to_string();
-
-    let script_content = r#"@echo off
-set /p MSI_PATH=<"%TEMP%\psitrak_update_msi_path.txt"
-if "%MSI_PATH%"=="" exit /b 1
-msiexec /i "%MSI_PATH%" /quiet /norestart
-del "%TEMP%\psitrak_update_msi_path.txt"
-"#;
-
-    std::fs::write(&updater_script, script_content)
-        .map_err(|e| format!("Failed to write updater script: {}", e))?;
-
-    let schtasks_args = format!(
-        "/Create /TN \"{}\" /TR \"cmd.exe /c \\\"{}\\\"\" /SC ONCE /ST 00:00 /RL HIGHEST /F",
-        TASK_NAME,
-        script_path.replace('\\', "\\\\")
-    );
-
-    let ps_command = format!(
-        "Start-Process -FilePath 'schtasks.exe' -ArgumentList '{}' -Verb RunAs -Wait -WindowStyle Hidden",
-        schtasks_args.replace('\'', "''")
-    );
-
-    // Note: register_update_task intentionally does NOT use CREATE_NO_WINDOW
-    // because it needs to show the UAC elevation prompt via Start-Process -Verb RunAs.
-    let output = Command::new("powershell.exe")
-        .args(["-NoProfile", "-WindowStyle", "Hidden", "-Command", &ps_command])
-        .output()
-        .map_err(|e| format!("Failed to launch elevated schtasks: {}", e))?;
-
-    if check_update_task_exists().unwrap_or(false) {
-        Ok("Task registered successfully".to_string())
-    } else {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        Err(format!(
-            "Task registration failed (UAC denied or error). stderr: {}",
-            stderr
-        ))
-    }
+async fn register_secure_update_task() -> Result<(), String> {
+    blocking(secure_update::register_secure_task).await?
 }
 
-/// Trigger the PsiTrakUpdater scheduled task to install a given MSI silently.
 #[tauri::command]
-fn trigger_update_task(msi_path: String) -> Result<String, String> {
-    if !std::path::Path::new(&msi_path).exists() {
-        return Err(format!("MSI file not found: {}", msi_path));
-    }
-
-    let trigger_file = std::env::temp_dir().join("psitrak_update_msi_path.txt");
-    std::fs::write(&trigger_file, &msi_path)
-        .map_err(|e| format!("Failed to write trigger file: {}", e))?;
-
-    let output = hidden_command("schtasks.exe")
-        .args(["/Run", "/TN", TASK_NAME])
-        .output()
-        .map_err(|e| format!("Failed to trigger update task: {}", e))?;
-
-    if output.status.success() {
-        Ok("Update task triggered successfully".to_string())
-    } else {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        Err(format!("Failed to trigger task: {}", stderr))
-    }
+async fn trigger_secure_update() -> Result<(), String> {
+    blocking(|| {
+        if secure_update::task_status() != "secure" {
+            return Err("secure update task is not registered".to_string());
+        }
+        secure_update::trigger_task()
+    })
+    .await?
 }
 
-/// Download the update MSI to a temp folder and return the path.
-/// Uses PowerShell Invoke-WebRequest with hidden window.
+/// Legacy path: download and VERIFY the installer (fixed URL, signature, newer version).
 #[tauri::command]
-async fn download_update_msi(download_url: String) -> Result<String, String> {
-    let temp_dir = std::env::temp_dir();
-    let msi_path = temp_dir.join("PsiTrak_update.msi");
-    let msi_path_str = msi_path.to_string_lossy().to_string();
+async fn download_update_msi(download_url: String, signature: String) -> Result<String, String> {
+    blocking(move || {
+        secure_update::legacy_download(&download_url, &signature).map(|p| p.to_string_lossy().to_string())
+    })
+    .await?
+}
 
-    let ps_command = format!(
-        "$ProgressPreference='SilentlyContinue'; [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri '{}' -OutFile '{}'",
-        download_url.replace('\'', "''"),
-        msi_path_str.replace('\'', "''")
-    );
-
-    let output = hidden_command("powershell.exe")
-        .args(["-NoProfile", "-WindowStyle", "Hidden", "-Command", &ps_command])
-        .output()
-        .map_err(|e| format!("Failed to download MSI: {}", e))?;
-
-    if output.status.success() && msi_path.exists() {
-        Ok(msi_path_str)
-    } else {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        Err(format!("Download failed: {}", stderr))
-    }
+/// Legacy path: start the legacy task on the verified file. Takes no path from the webview.
+#[tauri::command]
+async fn trigger_update_task() -> Result<(), String> {
+    blocking(secure_update::legacy_trigger).await?
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -143,10 +64,11 @@ pub fn run() {
     .plugin(tauri_plugin_process::init())
     .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, None))
     .invoke_handler(tauri::generate_handler![
-      check_update_task_exists,
-      register_update_task,
-      trigger_update_task,
+      update_task_status,
+      register_secure_update_task,
+      trigger_secure_update,
       download_update_msi,
+      trigger_update_task,
     ])
     .setup(|app| {
       use tauri_plugin_autostart::ManagerExt;

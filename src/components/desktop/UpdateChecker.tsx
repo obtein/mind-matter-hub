@@ -2,19 +2,43 @@ import { useEffect } from "react";
 import { IS_TAURI } from "@/lib/platform";
 import { toast } from "sonner";
 import { safeGetItem, safeSetItem } from "@/lib/storage";
+import { remoteLog } from "@/services/remote-logger";
 import type { Update } from "@tauri-apps/plugin-updater";
 
 /**
- * UpdateChecker - Handles automatic updates for the desktop (Tauri) app.
+ * UpdateChecker — automatic updates for the desktop app (the doctor is a standard Windows user).
  *
- * Strategy:
- * 1. On first launch, check if a Windows Scheduled Task ("PsiTrakUpdater") exists.
- * 2. If not, show a toast asking the user to grant one-time admin permission to create it.
- * 3. When an update is available:
- *    a. If scheduled task exists → download MSI to temp, trigger the task for silent install (no UAC).
- *    b. If scheduled task does NOT exist (fallback) → use tauri-plugin-updater's downloadAndInstall()
- *       which will trigger a UAC prompt each time.
+ * The "PsiTrakUpdater" scheduled task can be:
+ * - "secure": runs the installed exe with --apply-update as SYSTEM; the elevated process
+ *   downloads and verifies the installer itself. The app only starts the task and exits.
+ * - "legacy" (created before 0.7.12): runs a script from %TEMP%. Still used so updates keep
+ *   working, but the installer is downloaded and verified (signature, version, URL) in Rust
+ *   first. The app asks for a one-time administrator approval to replace it with the secure task.
+ * - "missing": tauri-plugin-updater's downloadAndInstall (asks for administrator rights).
+ *
+ * A failed silent install must not turn into an exit loop: the same version is attempted at
+ * most once per 30 minutes.
  */
+const ATTEMPT_KEY = "psitrak_update_attempt";
+const ATTEMPT_COOLDOWN_MS = 30 * 60 * 1000;
+const SECURE_DISMISSED_KEY = "psitrak_secure_task_dismissed";
+const SECURE_PROMPT_AT_KEY = "psitrak_secure_task_prompt_at";
+
+type TaskStatus = "missing" | "legacy" | "secure";
+
+function recentlyAttempted(version: string): boolean {
+  try {
+    const last = JSON.parse(safeGetItem(ATTEMPT_KEY) ?? "null") as { version: string; at: number } | null;
+    return !!last && last.version === version && Date.now() - last.at < ATTEMPT_COOLDOWN_MS;
+  } catch {
+    return false;
+  }
+}
+
+function recordAttempt(version: string): void {
+  safeSetItem(ATTEMPT_KEY, JSON.stringify({ version, at: Date.now() }));
+}
+
 export const UpdateChecker = () => {
   useEffect(() => {
     if (!IS_TAURI) return;
@@ -22,118 +46,95 @@ export const UpdateChecker = () => {
     const setupAndCheck = async () => {
       const { invoke } = await import("@tauri-apps/api/core");
 
-      // --- Step 1: Ensure the scheduled task is registered ---
-      let taskExists = false;
+      let status: TaskStatus = "missing";
       try {
-        taskExists = await invoke<boolean>("check_update_task_exists");
+        status = await invoke<TaskStatus>("update_task_status");
       } catch {
-        // schtasks check failed, assume not present
+        // schtasks unavailable: treat as missing
       }
 
-      const taskDismissed = safeGetItem("psitrak_task_dismissed") === "true";
-
-      if (!taskExists && !taskDismissed) {
-        // Show a one-time toast asking for admin permission
+      // --- Offer the secure task (one administrator approval) ---
+      const dismissed = safeGetItem(SECURE_DISMISSED_KEY) === "true";
+      // The legacy task is a security risk: offer the replacement once a day until it is done
+      // (the doctor cannot approve it herself; an administrator must).
+      const lastPrompt = Number(safeGetItem(SECURE_PROMPT_AT_KEY) ?? 0);
+      const promptDue = Date.now() - lastPrompt > 24 * 60 * 60 * 1000;
+      if ((status === "legacy" && promptDue) || (status === "missing" && !dismissed)) {
+        safeSetItem(SECURE_PROMPT_AT_KEY, String(Date.now()));
         toast.info(
-          "Sessiz güncellemeler için bir seferlik yönetici izni gerekiyor.",
+          status === "legacy"
+            ? "Güncelleme ayarı yenilenmeli: bir kez yönetici onayı gerekiyor."
+            : "Sessiz güncellemeler için bir seferlik yönetici onayı gerekiyor.",
           {
             id: "task-setup",
-            duration: 10000,
+            duration: 15000,
             action: {
-              label: "İzin Ver",
+              label: "Şimdi Kur",
               onClick: async () => {
                 try {
-                  toast.loading("Yönetici izni isteniyor...", { id: "task-setup" });
-                  await invoke<string>("register_update_task");
-                  toast.success("Sessiz güncelleme etkinleştirildi.", {
-                    id: "task-setup",
-                    duration: 3000,
-                  });
+                  toast.loading("Yönetici onayı isteniyor...", { id: "task-setup" });
+                  await invoke("register_secure_update_task");
+                  status = "secure";
+                  toast.success("Sessiz güncelleme güvenli şekilde kuruldu.", { id: "task-setup", duration: 4000 });
+                  remoteLog.info("Secure update task registered");
                 } catch (err: unknown) {
-                  // Task already exists or creation failed — either way, don't ask again
                   const msg = err instanceof Error ? err.message : String(err ?? "");
-                  if (msg.toLowerCase().includes("already exists")) {
-                    toast.dismiss("task-setup");
-                  } else {
-                    toast.error("Görev oluşturulamadı. Güncellemeler onay isteyecek.", {
-                      id: "task-setup",
-                      duration: 3000,
-                    });
-                  }
+                  toast.error(`Güncelleme ayarı kurulamadı. ${msg}`.trim(), { id: "task-setup", duration: 6000 });
+                  remoteLog.warn("Secure update task registration failed", { error: msg.slice(0, 300) });
                 }
-                safeSetItem("psitrak_task_dismissed", "true");
               },
             },
             onDismiss: () => {
-              // User dismissed the toast — don't show again
-              safeSetItem("psitrak_task_dismissed", "true");
+              if (status === "missing") safeSetItem(SECURE_DISMISSED_KEY, "true");
             },
-          }
+          },
         );
       }
 
-      // --- Step 2: Check for updates after a short delay ---
+      // --- Check for updates after a short delay ---
       await new Promise((resolve) => setTimeout(resolve, 5000));
 
+      let update: Update | null = null;
       try {
         const { check } = await import("@tauri-apps/plugin-updater");
-        const update = await check();
-
-        if (!update) return;
-
-        toast.info(`Güncelleme indiriliyor: v${update.version}...`, {
-          duration: Infinity,
-          id: "update",
-        });
-
-        // Re-check task existence (user may have just created it)
-        let useScheduledTask = false;
-        try {
-          useScheduledTask = await invoke<boolean>("check_update_task_exists");
-        } catch {
-          // fallback to direct install
-        }
-
-        // Extract download URL from rawJson (Tauri updater v2 latest.json format)
-        // The rawJson contains the full endpoint response, with platform entries having a "url" field
-        const downloadUrl = extractDownloadUrl(update.rawJson);
-
-        if (useScheduledTask && downloadUrl) {
-          // --- Path A: Silent install via scheduled task (no UAC) ---
-          try {
-            // Download the MSI to a temp folder via Rust
-            const msiPath = await invoke<string>("download_update_msi", {
-              downloadUrl,
-            });
-
-            toast.info("MSI indirildi, sessiz kurulum başlatılıyor...", { id: "update" });
-
-            // Trigger the scheduled task to install the MSI
-            await invoke<string>("trigger_update_task", { msiPath });
-
-            toast.success(
-              "Güncelleme başlatıldı. Uygulama birkaç saniye içinde yeniden başlayacak...",
-              { id: "update" }
-            );
-
-            // Wait a bit for msiexec to start, then exit the app so it can be replaced
-            await new Promise((resolve) => setTimeout(resolve, 3000));
-            const { exit } = await import("@tauri-apps/plugin-process");
-            await exit(0);
-          } catch (err: unknown) {
-            // If scheduled task approach fails, fall back to direct install
-            console.error("Scheduled task update failed, falling back:", err);
-            toast.info("Sessiz kurulum başarısız, standart güncelleme deneniyor...", {
-              id: "update",
-            });
-            await fallbackDirectInstall(update);
-          }
-        } else {
-          // --- Path B: Fallback - direct install via tauri-plugin-updater (will trigger UAC) ---
-          await fallbackDirectInstall(update);
-        }
+        update = await check();
       } catch {
-        // Silently fail — updater endpoint might not be configured yet
+        return; // endpoint unreachable — try again on the next start
+      }
+      if (!update) return;
+
+      if (status !== "missing" && recentlyAttempted(update.version)) {
+        // The last silent install of this version did not replace the app.
+        toast.error("Güncelleme kurulamadı. Lütfen yöneticiye bildirin.", { id: "update", duration: 10000 });
+        remoteLog.error("Silent update did not install", { version: update.version, status });
+        return;
+      }
+
+      toast.info(`Güncelleme indiriliyor: v${update.version}...`, { duration: Infinity, id: "update" });
+      try {
+        if (status === "secure") {
+          // The SYSTEM task downloads and verifies the installer itself.
+          await invoke("trigger_secure_update");
+        } else if (status === "legacy") {
+          const entry = windowsEntry(update.rawJson);
+          if (!entry) throw new Error("latest.json içinde Windows kaydı yok");
+          await invoke<string>("download_update_msi", { downloadUrl: entry.url, signature: entry.signature });
+          await invoke("trigger_update_task");
+        } else {
+          await fallbackDirectInstall(update);
+          return;
+        }
+        recordAttempt(update.version);
+        remoteLog.info("Silent update started", { version: update.version, status });
+        toast.success("Güncelleme kuruluyor. Uygulama birkaç saniye içinde kapanacak; sonra yeniden açın.", { id: "update" });
+        // Exit so the installer can replace the files (the task waits for this).
+        await new Promise((resolve) => setTimeout(resolve, 3000));
+        const { exit } = await import("@tauri-apps/plugin-process");
+        await exit(0);
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err ?? "");
+        remoteLog.error("Silent update failed", { version: update.version, status, error: msg.slice(0, 300) });
+        toast.error(`Sessiz güncelleme başarısız: ${msg}`.trim(), { id: "update", duration: 10000 });
       }
     };
 
@@ -144,9 +145,7 @@ export const UpdateChecker = () => {
   return null;
 };
 
-/**
- * Fallback: use tauri-plugin-updater's downloadAndInstall() which triggers UAC each time.
- */
+/** tauri-plugin-updater's own install (verifies the signature; asks for administrator rights). */
 async function fallbackDirectInstall(update: Update) {
   try {
     await update.downloadAndInstall();
@@ -158,36 +157,14 @@ async function fallbackDirectInstall(update: Update) {
   }
 }
 
-/**
- * Extract the MSI download URL from the Tauri updater rawJson response.
- * The latest.json format for Tauri v2 can be:
- *   - { url: "...", version: "...", ... }                   (single platform)
- *   - { platforms: { "windows-x86_64": { url: "..." } } }  (multi-platform)
- */
-function extractDownloadUrl(rawJson: Record<string, unknown>): string | null {
-  try {
-    // Direct url field
-    if (typeof rawJson.url === "string") {
-      return rawJson.url;
+/** Windows entry of latest.json (url + signature). Rust verifies both before anything runs. */
+function windowsEntry(rawJson: Record<string, unknown>): { url: string; signature: string } | null {
+  const platforms = rawJson.platforms as Record<string, { url?: unknown; signature?: unknown }> | undefined;
+  for (const key of ["windows-x86_64-msi", "windows-x86_64"]) {
+    const p = platforms?.[key];
+    if (typeof p?.url === "string" && typeof p?.signature === "string") {
+      return { url: p.url, signature: p.signature };
     }
-    // Multi-platform format
-    if (rawJson.platforms && typeof rawJson.platforms === "object") {
-      const platforms = rawJson.platforms as Record<string, { url?: unknown }>;
-      // Try common Windows target keys
-      for (const key of ["windows-x86_64", "x86_64-pc-windows-msvc"]) {
-        if (platforms[key]?.url) {
-          return platforms[key].url as string;
-        }
-      }
-      // Fallback: pick the first platform with a url
-      for (const key of Object.keys(platforms)) {
-        if (key.toLowerCase().includes("windows") && platforms[key]?.url) {
-          return platforms[key].url as string;
-        }
-      }
-    }
-  } catch {
-    // Extraction failed
   }
   return null;
 }

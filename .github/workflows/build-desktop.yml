@@ -11,6 +11,9 @@ permissions:
 
 jobs:
   build-windows:
+    # A release (and latest.json) is only ever published from a version tag; a manual run on a
+    # branch would skip the tag/version check and could overwrite an existing release.
+    if: github.ref_type == 'tag'
     runs-on: windows-latest
     name: "Build (Windows x64)"
 
