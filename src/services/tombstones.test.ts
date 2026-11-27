@@ -6,6 +6,7 @@ import { PGLITE_OPTIONS } from "./pglite/options";
 import { LOCAL_MIGRATIONS_SQL } from "./pglite/migrations";
 import {
   applyRemoteTombstones,
+  clearTombstonesForExistingRows,
   deleteAppointmentCascade,
   deleteOne,
   deletePatientCascade,
@@ -105,5 +106,24 @@ describe("updated_at trigger (bug-hunt L1)", () => {
     await db.query("UPDATE patients SET full_name = 'Y' WHERE id = $1", [P]);
     ({ rows } = await db.query<{ u: Date }>("SELECT updated_at AS u FROM patients WHERE id = $1", [P]));
     expect(rows[0].u.getTime()).toBeGreaterThan(new Date("2025-01-01").getTime());
+  });
+});
+
+describe("refuter follow-ups", () => {
+  it("a tombstone from another device also removes the local row", async () => {
+    await applyRemoteTombstones(db, [{ table_name: "session_medications", record_id: M1 }]);
+    const { rows } = await db.query<{ n: number }>("SELECT count(*)::int AS n FROM session_medications WHERE id = $1", [M1]);
+    expect(rows[0].n).toBe(0);
+  });
+
+  it("ignores tombstones for unknown tables", async () => {
+    await expect(applyRemoteTombstones(db, [{ table_name: "local_users", record_id: P }])).resolves.toBeUndefined();
+  });
+
+  it("restoring a row clears its local tombstone (restore = undelete)", async () => {
+    await deleteOne(db, "session_medications", M1);
+    await db.query("INSERT INTO session_medications (id, appointment_id, medication_name) VALUES ($1, $2, 'F41.1')", [M1, A1]);
+    await clearTombstonesForExistingRows(db);
+    expect((await tombstonedIds(db, "session_medications")).has(M1)).toBe(false);
   });
 });

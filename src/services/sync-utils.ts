@@ -155,6 +155,8 @@ export async function fetchAllPages(
       headers: { ...headers, "Range-Unit": "items", Range: `${from}-${from + pageSize - 1}` },
       signal: opts.signal,
     });
+    // 416: the requested range starts after the last row (exact multiple of the page size).
+    if (res.status === 416) return all;
     if (!res.ok && res.status !== 206) {
       const text = await res.text().catch(() => "");
       throw new Error(`indirilemedi (${safeErrorText(res.status, text)})`);

@@ -1,5 +1,6 @@
 import { getPGlite } from "./pglite/init";
 import { safeSetItem } from "@/lib/storage";
+import { clearTombstonesForExistingRows } from "./tombstones";
 
 const BACKUP_VERSION = "1.0.0";
 const SALT_LENGTH = 16;
@@ -174,6 +175,7 @@ export async function importBackup(buffer: ArrayBuffer, password: string): Promi
       }
     }
 
+    await clearTombstonesForExistingRows(db);
     await db.exec("COMMIT");
     // The restored rows may be older than the cloud copy: the next sync must pull first.
     safeSetItem("psitrak_pending_sync", "true");

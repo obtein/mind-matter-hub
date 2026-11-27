@@ -84,10 +84,26 @@ export async function markTombstonesSynced(db: Q, list: Tombstone[]): Promise<vo
 
 export async function applyRemoteTombstones(db: Q, list: Tombstone[]): Promise<void> {
   for (const t of list) {
+    if (!(TOMBSTONE_TABLES as readonly string[]).includes(t.table_name)) continue;
     await db.query(
       `INSERT INTO deleted_records (table_name, record_id, synced) VALUES ($1, $2, true)
        ON CONFLICT (table_name, record_id) DO UPDATE SET synced = true`,
       [t.table_name, String(t.record_id)],
+    );
+    // Deleted on another device: remove it here too (children cascade locally).
+    await db.query(`DELETE FROM ${t.table_name} WHERE id::text = $1`, [String(t.record_id)]);
+  }
+}
+
+/**
+ * After a backup restore: a restored row is wanted again, so its local tombstone is dropped
+ * and the next push sends it. (The cloud tombstone stays; the cloud never deletes.)
+ */
+export async function clearTombstonesForExistingRows(db: Q): Promise<void> {
+  for (const table of TOMBSTONE_TABLES) {
+    await db.query(
+      `DELETE FROM deleted_records WHERE table_name = $1 AND record_id IN (SELECT id::text FROM ${table})`,
+      [table],
     );
   }
 }

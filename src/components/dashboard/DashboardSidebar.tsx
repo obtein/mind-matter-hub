@@ -61,6 +61,8 @@ export const DashboardSidebar = ({ viewState, setViewState, user }: DashboardSid
       } else {
         safeSetItem("psitrak_pending_sync", "true");
       }
+      // Notes typed during the push are still pending: save them while the database is open.
+      await flushPendingSaves();
       await auth.signOut();
       const { closePGlite } = await import("@/services/pglite/init");
       await closePGlite();

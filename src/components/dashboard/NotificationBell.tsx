@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useDb } from "@/services/ServiceContext";
 import { Button } from "@/components/ui/button";
 import {
@@ -31,6 +31,7 @@ export const NotificationBell = () => {
   const [unreadCount, setUnreadCount] = useState(0);
   const [isOpen, setIsOpen] = useState(false);
   const [loading, setLoading] = useState(true);
+  const reminderCheckRunning = useRef(false);
 
   useEffect(() => {
     fetchNotifications();
@@ -61,6 +62,9 @@ export const NotificationBell = () => {
   };
 
   const checkDueReminders = async () => {
+    // One check at a time: two overlapping runs could both create the same notification.
+    if (reminderCheckRunning.current) return;
+    reminderCheckRunning.current = true;
     try {
       // Owner of the open local database; no network call.
       const userId = db.getCurrentUserId();
@@ -93,6 +97,8 @@ export const NotificationBell = () => {
       fetchNotifications();
     } catch {
       // Silent - reminders retry on the next minute
+    } finally {
+      reminderCheckRunning.current = false;
     }
   };
 

@@ -206,23 +206,28 @@ export function useAppointment(appointmentId: string, patientId: string) {
   const notesRef = useRef(notes);
   notesRef.current = notes;
   const notesDirty = savedNotes !== null && notes !== savedNotes;
+  const [autosaveFailed, setAutosaveFailed] = useState(false);
 
   const persistNotes = useCallback(async () => {
     const value = notesRef.current;
     if (savedNotesRef.current === null || value === savedNotesRef.current) return;
     await appointmentRepo.update(appointmentId, { notes: value });
     markSaved(value);
+    setAutosaveFailed(false);
   }, [appointmentId, appointmentRepo, markSaved]);
 
   useEffect(() => {
-    // Only the first loaded value counts as saved; later edits are dirty.
-    if (!loading && savedNotesRef.current === null) markSaved(notesRef.current);
-  }, [loading, markSaved]);
+    // Only the first successfully loaded value counts as saved; later edits are dirty.
+    if (!loading && appointment && savedNotesRef.current === null) markSaved(notesRef.current);
+  }, [loading, appointment, markSaved]);
 
   useEffect(() => {
     if (!notesDirty) return;
     const timer = setTimeout(() => {
-      persistNotes().catch(() => toast.error("Notlar otomatik kaydedilemedi"));
+      persistNotes().catch(() => {
+        setAutosaveFailed(true);
+        toast.error("Notlar otomatik kaydedilemedi. Lütfen Kaydet'e basın.");
+      });
     }, NOTES_AUTOSAVE_MS);
     return () => clearTimeout(timer);
   }, [notes, notesDirty, persistNotes]);
@@ -452,6 +457,7 @@ export function useAppointment(appointmentId: string, patientId: string) {
     saveNotes,
     changeStatus,
     notesDirty,
+    autosaveFailed,
     addMedication,
     deleteMedication,
     createNewAppointment,

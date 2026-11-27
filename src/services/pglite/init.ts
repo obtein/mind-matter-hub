@@ -48,9 +48,12 @@ export async function initUserDb(userId: string): Promise<PGlite> {
 export async function getPGlite(): Promise<PGlite> {
   if (db) return db;
   if (initPromise) return initPromise;
+  // After logout no user owns a database. A late query (an unmount save, a timer) must fail,
+  // not open a shared "default" database.
+  if (!currentUserId) throw new Error("Veritabanı kapalı (oturum yok)");
 
   initPromise = (async () => {
-    const dbName = currentUserId ? `idb://psitrak_${currentUserId}` : "idb://psitrak_default";
+    const dbName = `idb://psitrak_${currentUserId}`;
 
     let instance: PGlite;
     try {

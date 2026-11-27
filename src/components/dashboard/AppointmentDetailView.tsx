@@ -240,7 +240,11 @@ export const AppointmentDetailView = ({ appointmentId, patientId, onBack }: Appo
             </CardTitle>
             <div className="flex items-center gap-3">
               <span className="text-xs text-muted-foreground">
-                {vm.notesDirty ? "Kaydedilmemiş değişiklik — otomatik kaydedilecek" : "Otomatik kaydediliyor"}
+                {vm.autosaveFailed
+                  ? "Otomatik kayıt başarısız — Kaydet'e basın"
+                  : vm.notesDirty
+                    ? "Kaydedilmemiş değişiklik — otomatik kaydedilecek"
+                    : "Otomatik kaydediliyor"}
               </span>
               <Button onClick={vm.saveNotes} disabled={vm.saving} size="sm">
                 <Save className="w-4 h-4 mr-2" />

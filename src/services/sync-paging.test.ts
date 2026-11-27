@@ -76,3 +76,18 @@ describe("safeErrorText (bug-hunt M5)", () => {
     expect(safeErrorText(502, "<html>Ayşe</html>")).toBe("502");
   });
 });
+
+describe("fetchAllPages end of data (refuter follow-up)", () => {
+  it("treats 416 (range after the last row) as the end of the data", async () => {
+    let call = 0;
+    const f = vi.fn(async () => {
+      call += 1;
+      if (call === 1) {
+        return new Response(JSON.stringify(Array.from({ length: 1000 }, (_, i) => ({ id: String(i) }))), { status: 206 });
+      }
+      return new Response("", { status: 416 });
+    }) as unknown as typeof fetch;
+    const all = await fetchAllPages("https://x/rest/v1/t?select=*", {}, { fetchImpl: f });
+    expect(all).toHaveLength(1000);
+  });
+});
