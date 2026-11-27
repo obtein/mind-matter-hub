@@ -31,6 +31,8 @@ export interface ViewState {
   type: ViewType;
   patientId?: string;
   appointmentId?: string;
+  /** Where "back" from an appointment returns to. */
+  from?: "schedule" | "patient-detail";
 }
 
 type InitPhase = "auth" | "database" | "sync" | "ready";
@@ -60,6 +62,7 @@ const Dashboard = () => {
         navigate("/");
       } else {
         setUser(u);
+        setHeartbeatUser({ id: u.id, email: u.email || "" });
       }
     });
 
@@ -210,44 +213,50 @@ const Dashboard = () => {
           </header>
           <main className="p-6 lg:p-8">
             {viewState.type === "schedule" && (
-              <ErrorBoundary>
+              <ErrorBoundary key={`${viewState.type}:${viewState.patientId ?? ""}:${viewState.appointmentId ?? ""}`}>
                 <DailyScheduleView
                   onAppointmentSelect={(appointmentId, patientId) =>
-                    navigateTo({ type: "appointment-detail", appointmentId, patientId })
+                    navigateTo({ type: "appointment-detail", appointmentId, patientId, from: "schedule" })
                   }
                 />
               </ErrorBoundary>
             )}
             {viewState.type === "patients" && (
-              <ErrorBoundary>
+              <ErrorBoundary key={`${viewState.type}:${viewState.patientId ?? ""}:${viewState.appointmentId ?? ""}`}>
                 <PatientsView onPatientSelect={(id) => navigateTo({ type: "patient-detail", patientId: id })} />
               </ErrorBoundary>
             )}
             {viewState.type === "patient-detail" && viewState.patientId && (
-              <ErrorBoundary>
+              <ErrorBoundary key={`${viewState.type}:${viewState.patientId ?? ""}:${viewState.appointmentId ?? ""}`}>
                 <PatientDetailView
                   patientId={viewState.patientId}
                   onBack={() => navigateTo({ type: "patients" })}
-                  onAppointmentSelect={(appointmentId) => navigateTo({ type: "appointment-detail", patientId: viewState.patientId, appointmentId })}
+                  onAppointmentSelect={(appointmentId) => navigateTo({ type: "appointment-detail", patientId: viewState.patientId, appointmentId, from: "patient-detail" })}
                 />
               </ErrorBoundary>
             )}
             {viewState.type === "appointment-detail" && viewState.appointmentId && viewState.patientId && (
-              <ErrorBoundary>
+              <ErrorBoundary key={`${viewState.type}:${viewState.patientId ?? ""}:${viewState.appointmentId ?? ""}`}>
                 <AppointmentDetailView
                   appointmentId={viewState.appointmentId}
                   patientId={viewState.patientId}
-                  onBack={() => navigateTo({ type: "patient-detail", patientId: viewState.patientId })}
+                  onBack={() =>
+                    navigateTo(
+                      viewState.from === "schedule"
+                        ? { type: "schedule" }
+                        : { type: "patient-detail", patientId: viewState.patientId }
+                    )
+                  }
                 />
               </ErrorBoundary>
             )}
             {viewState.type === "statistics" && (
-              <ErrorBoundary>
+              <ErrorBoundary key={`${viewState.type}:${viewState.patientId ?? ""}:${viewState.appointmentId ?? ""}`}>
                 <StatisticsView />
               </ErrorBoundary>
             )}
             {viewState.type === "medications" && (
-              <ErrorBoundary>
+              <ErrorBoundary key={`${viewState.type}:${viewState.patientId ?? ""}:${viewState.appointmentId ?? ""}`}>
                 <MedicationsReportView />
               </ErrorBoundary>
             )}

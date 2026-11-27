@@ -5,6 +5,8 @@ interface ConflictCheckResult {
   conflictingPatient?: string;
 }
 
+const LOOKBACK_MS = 24 * 60 * 60 * 1000;
+
 export const checkAppointmentConflict = async (
   appointmentDate: Date,
   durationMinutes: number,
@@ -14,16 +16,14 @@ export const checkAppointmentConflict = async (
   const startTime = appointmentDate.getTime();
   const endTime = startTime + durationMinutes * 60 * 1000;
 
-  // Fetch appointments for the same day
-  const dayStart = new Date(appointmentDate);
-  dayStart.setHours(0, 0, 0, 0);
-  
-  const dayEnd = new Date(appointmentDate);
-  dayEnd.setHours(23, 59, 59, 999);
+  // Any appointment that starts up to a day earlier can still be running (a session after
+  // 23:00 crosses midnight), so the window is not the calendar day.
+  const windowStart = new Date(startTime - LOOKBACK_MS);
+  const windowEnd = new Date(endTime);
 
   const appointments = await db.getAppointmentsForConflictCheck(
-    dayStart.toISOString(),
-    dayEnd.toISOString(),
+    windowStart.toISOString(),
+    windowEnd.toISOString(),
     excludeAppointmentId
   );
 

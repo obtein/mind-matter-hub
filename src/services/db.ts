@@ -1,3 +1,4 @@
+import type { DueReminder } from "./reminders";
 // ── Row types (mirrors Supabase schema) ──
 
 export interface Patient {
@@ -152,6 +153,8 @@ export interface DbService {
     excludeId?: string
   ): Promise<AppointmentWithPatient[]>;
   getUpcomingAppointments(now: string, tomorrow: string): Promise<UpcomingAppointment[]>;
+  getDueReminders(nowIso: string): Promise<DueReminder[]>;
+  markReminderSent(reminderId: string, sentAtIso: string): Promise<void>;
 
   // Medications
   getMedicationsByAppointment(appointmentId: string): Promise<Medication[]>;
@@ -162,6 +165,7 @@ export interface DbService {
 
   // Notifications
   getNotifications(limit?: number): Promise<Notification[]>;
+  countUnreadNotifications(): Promise<number>;
   getNotificationsByAppointmentIds(ids: string[]): Promise<{ related_appointment_id: string }[]>;
   createNotification(data: NotificationInsert): Promise<void>;
   markNotificationRead(id: string): Promise<void>;

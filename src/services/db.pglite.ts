@@ -1,6 +1,9 @@
 import { getPGlite, getCurrentDbUserId } from "./pglite/init";
 import { deleteAppointmentCascade, deleteOne, deletePatientCascade } from "./tombstones";
+import { dueReminders, markReminderSent, type DueReminder } from "./reminders";
 import { remoteLog } from "./remote-logger";
+
+const PATIENT_UPDATE_COLUMNS = new Set(["full_name", "phone", "date_of_birth", "gender", "address", "meslek", "notes"]);
 
 /** PGlite returns Date objects for timestamp columns. Ensure they are ISO strings. */
 function toISOString(val: unknown): string {
@@ -45,7 +48,7 @@ export class PGliteDbService implements DbService {
     } catch (error) {
       console.error("[db.getPatients] failed:", error);
       remoteLog.error("db.getPatients failed", { error: (error as Error).message });
-      return [];
+      throw error;
     }
   }
 
@@ -66,7 +69,7 @@ export class PGliteDbService implements DbService {
     } catch (error) {
       console.error("[db.getPatientsWithLastAppointment] failed:", error);
       remoteLog.error("db.getPatientsWithLastAppointment failed", { error: (error as Error).message });
-      return [];
+      throw error;
     }
   }
 
@@ -81,7 +84,7 @@ export class PGliteDbService implements DbService {
     } catch (error) {
       console.error("[db.getPatient] failed:", error);
       remoteLog.error("db.getPatient failed", { error: (error as Error).message });
-      return null;
+      throw error;
     }
   }
 
@@ -110,6 +113,8 @@ export class PGliteDbService implements DbService {
       let idx = 1;
 
       for (const [key, val] of Object.entries(data)) {
+        // Column names come from code, but never interpolate an unknown key into SQL.
+        if (!PATIENT_UPDATE_COLUMNS.has(key)) throw new Error(`Unknown patient field: ${key}`);
         if (val !== undefined) {
           fields.push(`${key} = $${idx}`);
           values.push(val);
@@ -151,7 +156,7 @@ export class PGliteDbService implements DbService {
     } catch (error) {
       console.error("[db.getLastAppointmentDate] failed:", error);
       remoteLog.error("db.getLastAppointmentDate failed", { error: (error as Error).message });
-      return null;
+      throw error;
     }
   }
 
@@ -165,7 +170,7 @@ export class PGliteDbService implements DbService {
     } catch (error) {
       console.error("[db.getPatientsForStats] failed:", error);
       remoteLog.error("db.getPatientsForStats failed", { error: (error as Error).message });
-      return [];
+      throw error;
     }
   }
 
@@ -195,7 +200,7 @@ export class PGliteDbService implements DbService {
     } catch (error) {
       console.error("[db.getAppointmentsByDateRange] failed:", error);
       remoteLog.error("db.getAppointmentsByDateRange failed", { error: (error as Error).message });
-      return [];
+      throw error;
     }
   }
 
@@ -210,7 +215,7 @@ export class PGliteDbService implements DbService {
     } catch (error) {
       console.error("[db.getAppointmentsByPatient] failed:", error);
       remoteLog.error("db.getAppointmentsByPatient failed", { error: (error as Error).message });
-      return [];
+      throw error;
     }
   }
 
@@ -226,7 +231,7 @@ export class PGliteDbService implements DbService {
     } catch (error) {
       console.error("[db.getAppointment] failed:", error);
       remoteLog.error("db.getAppointment failed", { error: (error as Error).message });
-      return null;
+      throw error;
     }
   }
 
@@ -285,14 +290,14 @@ export class PGliteDbService implements DbService {
     try {
       const db = await getPGlite();
       const { rows } = await db.query<{ appointment_date: string }>(
-        "SELECT appointment_date FROM appointments WHERE appointment_date >= $1 AND appointment_date <= $2",
+        "SELECT appointment_date FROM appointments WHERE appointment_date >= $1 AND appointment_date <= $2 AND status <> 'cancelled'",
         [start, end]
       );
       return rows.map((r) => toISOString(r.appointment_date));
     } catch (error) {
       console.error("[db.getMonthlyAppointmentDates] failed:", error);
       remoteLog.error("db.getMonthlyAppointmentDates failed", { error: (error as Error).message });
-      return [];
+      throw error;
     }
   }
 
@@ -306,7 +311,7 @@ export class PGliteDbService implements DbService {
     } catch (error) {
       console.error("[db.getAppointmentsForStats] failed:", error);
       remoteLog.error("db.getAppointmentsForStats failed", { error: (error as Error).message });
-      return [];
+      throw error;
     }
   }
 
@@ -344,7 +349,7 @@ export class PGliteDbService implements DbService {
     } catch (error) {
       console.error("[db.getAppointmentsForConflictCheck] failed:", error);
       remoteLog.error("db.getAppointmentsForConflictCheck failed", { error: (error as Error).message });
-      return [];
+      throw error;
     }
   }
 
@@ -367,8 +372,22 @@ export class PGliteDbService implements DbService {
     } catch (error) {
       console.error("[db.getUpcomingAppointments] failed:", error);
       remoteLog.error("db.getUpcomingAppointments failed", { error: (error as Error).message });
-      return [];
+      throw error;
     }
+  }
+
+  async getDueReminders(nowIso: string): Promise<DueReminder[]> {
+    try {
+      return await dueReminders(await getPGlite(), nowIso);
+    } catch (error) {
+      console.error("[db.getDueReminders] failed:", error);
+      remoteLog.error("db.getDueReminders failed", { error: (error as Error).message });
+      throw error;
+    }
+  }
+
+  async markReminderSent(reminderId: string, sentAtIso: string): Promise<void> {
+    await markReminderSent(await getPGlite(), reminderId, sentAtIso);
   }
 
   // ── Medications ──
@@ -384,7 +403,7 @@ export class PGliteDbService implements DbService {
     } catch (error) {
       console.error("[db.getMedicationsByAppointment] failed:", error);
       remoteLog.error("db.getMedicationsByAppointment failed", { error: (error as Error).message });
-      return [];
+      throw error;
     }
   }
 
@@ -417,7 +436,7 @@ export class PGliteDbService implements DbService {
     } catch (error) {
       console.error("[db.getMedicationsByAppointmentIds] failed:", error);
       remoteLog.error("db.getMedicationsByAppointmentIds failed", { error: (error as Error).message });
-      return [];
+      throw error;
     }
   }
 
@@ -457,7 +476,7 @@ export class PGliteDbService implements DbService {
     } catch (error) {
       console.error("[db.getAllMedicationsWithDetails] failed:", error);
       remoteLog.error("db.getAllMedicationsWithDetails failed", { error: (error as Error).message });
-      return [];
+      throw error;
     }
   }
 
@@ -488,6 +507,12 @@ export class PGliteDbService implements DbService {
 
   // ── Notifications ──
 
+  async countUnreadNotifications(): Promise<number> {
+    const db = await getPGlite();
+    const { rows } = await db.query<{ n: number }>("SELECT count(*)::int AS n FROM notifications WHERE NOT is_read");
+    return rows[0]?.n ?? 0;
+  }
+
   async getNotifications(limit = 20): Promise<Notification[]> {
     try {
       const db = await getPGlite();
@@ -499,7 +524,7 @@ export class PGliteDbService implements DbService {
     } catch (error) {
       console.error("[db.getNotifications] failed:", error);
       remoteLog.error("db.getNotifications failed", { error: (error as Error).message });
-      return [];
+      throw error;
     }
   }
 
@@ -516,7 +541,7 @@ export class PGliteDbService implements DbService {
     } catch (error) {
       console.error("[db.getNotificationsByAppointmentIds] failed:", error);
       remoteLog.error("db.getNotificationsByAppointmentIds failed", { error: (error as Error).message });
-      return [];
+      throw error;
     }
   }
 
@@ -602,7 +627,7 @@ export class PGliteDbService implements DbService {
     } catch (error) {
       console.error("[db.getProfile] failed:", error);
       remoteLog.error("db.getProfile failed", { error: (error as Error).message });
-      return null;
+      throw error;
     }
   }
 
@@ -619,7 +644,7 @@ export class PGliteDbService implements DbService {
     } catch (error) {
       console.error("[db.getPatientName] failed:", error);
       remoteLog.error("db.getPatientName failed", { error: (error as Error).message });
-      return null;
+      throw error;
     }
   }
 }

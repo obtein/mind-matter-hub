@@ -7,6 +7,7 @@ import { useEffect } from "react";
 export const DeviceServices = () => {
   useEffect(() => {
     let cleanup: (() => void) | undefined;
+    let unmounted = false;
 
     const init = async () => {
       try {
@@ -14,6 +15,8 @@ export const DeviceServices = () => {
         const { startHeartbeat, stopHeartbeat } = await import("@/services/heartbeat");
         const { startCommandListener, stopCommandListener } = await import("@/services/command-listener");
 
+        // Unmounted while the modules were loading (quick logout): do not start anything.
+        if (unmounted) return;
         startHeartbeat();
         startCommandListener();
         console.log("[DeviceServices] Started successfully");
@@ -30,6 +33,7 @@ export const DeviceServices = () => {
     init();
 
     return () => {
+      unmounted = true;
       if (cleanup) cleanup();
     };
   }, []);

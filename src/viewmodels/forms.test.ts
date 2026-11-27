@@ -288,3 +288,21 @@ describe("usePatients.submitPatient", () => {
     expect(toast.error).not.toHaveBeenCalled();
   });
 });
+
+// bug-hunt M2 (2026-11-27): a failed conflict query used to return [] and looked like a free
+// slot; the check must fail closed.
+describe("useAppointment conflict check fails closed (bug-hunt M2)", () => {
+  it("shows a blocking warning when the calendar cannot be read", async () => {
+    db.getAppointmentsForConflictCheck.mockRejectedValue(new Error("disk"));
+    const { result } = renderHook(() => useAppointment("apt-1", "pat-1"));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    act(() =>
+      result.current.setNewAppointmentForm({
+        ...result.current.newAppointmentForm,
+        appointment_date: "2026-10-13",
+        appointment_time: "10:00",
+      })
+    );
+    await waitFor(() => expect(result.current.conflictWarning).toMatch(/Çakışma kontrolü yapılamadı/));
+  });
+});

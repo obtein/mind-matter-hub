@@ -5,6 +5,7 @@ import { format } from "date-fns";
 import { tr } from "date-fns/locale";
 import { MonthlyCalendar } from "./MonthlyCalendar";
 import { useSchedule } from "@/viewmodels/useSchedule";
+import { LoadError } from "@/components/LoadError";
 
 interface DailyScheduleViewProps {
   onAppointmentSelect?: (appointmentId: string, patientId: string) => void;
@@ -67,6 +68,8 @@ export const DailyScheduleView = ({ onAppointmentSelect }: DailyScheduleViewProp
         <div className="flex items-center justify-center h-32">
           <Loader2 className="w-6 h-6 animate-spin text-primary" />
         </div>
+      ) : vm.error ? (
+        <LoadError message={vm.error} onRetry={vm.refresh} />
       ) : (
       <div className="space-y-2">
         {vm.hours.map((hour) => {

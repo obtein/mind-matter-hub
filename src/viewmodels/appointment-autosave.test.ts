@@ -111,3 +111,17 @@ describe("useAppointment notes autosave", () => {
     expect(db.updateAppointment).not.toHaveBeenCalled();
   });
 });
+
+describe("useAppointment reactivation (bug-hunt L5)", () => {
+  it("refuses to set a cancelled appointment back to scheduled over another booking", async () => {
+    db.getAppointment.mockResolvedValue({ ...APPOINTMENT, status: "cancelled" });
+    (db as unknown as { getAppointmentsForConflictCheck: ReturnType<typeof vi.fn> }).getAppointmentsForConflictCheck =
+      vi.fn(async () => [{ appointment_date: APPOINTMENT.appointment_date, duration_minutes: 60, patients: { full_name: "Ali" } }]);
+    const { result } = await load();
+    await act(async () => {
+      await result.current.changeStatus("scheduled");
+    });
+    expect(result.current.status).toBe("cancelled");
+    expect(db.updateAppointment).not.toHaveBeenCalled();
+  });
+});

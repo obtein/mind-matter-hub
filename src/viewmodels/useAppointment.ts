@@ -178,7 +178,8 @@ export function useAppointment(appointmentId: string, patientId: string) {
           setConflictWarning(null);
         }
       } catch {
-        // Conflict check is non-critical
+        // Fail closed: an unreadable calendar must not look like a free slot.
+        setConflictWarning("Çakışma kontrolü yapılamadı. Lütfen tekrar deneyin.");
       } finally {
         setCheckingConflict(false);
       }
@@ -237,6 +238,24 @@ export function useAppointment(appointmentId: string, patientId: string) {
   const changeStatus = useCallback(
     async (next: string) => {
       const previous = status;
+      // A cancelled slot may have been rebooked; reactivating must not create a double booking.
+      if (previous === "cancelled" && next !== "cancelled" && appointment) {
+        try {
+          const { hasConflict, conflictingPatient } = await checkAppointmentConflict(
+            new Date(appointment.appointment_date),
+            appointment.duration_minutes,
+            appointmentId,
+            db
+          );
+          if (hasConflict) {
+            toast.error(`Bu saatte ${conflictingPatient} ile çakışan randevu var; durum değiştirilmedi.`);
+            return;
+          }
+        } catch {
+          toast.error("Çakışma kontrolü yapılamadı; durum değiştirilmedi.");
+          return;
+        }
+      }
       setStatus(next);
       try {
         await appointmentRepo.update(appointmentId, { status: next });
@@ -246,7 +265,7 @@ export function useAppointment(appointmentId: string, patientId: string) {
         toast.error("Durum kaydedilemedi");
       }
     },
-    [appointmentId, appointmentRepo, status],
+    [appointment, appointmentId, appointmentRepo, db, status],
   );
 
   const saveNotes = useCallback(async () => {
@@ -335,6 +354,12 @@ export function useAppointment(appointmentId: string, patientId: string) {
         );
         if (isNaN(appointmentDateTime.getTime())) {
           toast.error("Geçersiz tarih veya saat formatı");
+          return;
+        }
+        // <input type="date"> accepts 6-digit years (the 20022 typo once broke the cloud sync).
+        const year = appointmentDateTime.getFullYear();
+        if (year < 2000 || year > 2100) {
+          toast.error("Randevu yılı 2000 ile 2100 arasında olmalıdır");
           return;
         }
         // Past times are allowed on purpose: sessions are recorded after they take place.

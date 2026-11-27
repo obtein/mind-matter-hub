@@ -24,6 +24,11 @@ export async function initUserDb(userId: string): Promise<PGlite> {
   if (userId !== currentUserId) {
     // Önceki close tamamlanana kadar bekle
     while (closing) await new Promise((r) => setTimeout(r, 50));
+    // An init for the previous user may still be opening: let it finish, then close it,
+    // so the new user never receives the previous user's database.
+    if (!db && initPromise) {
+      try { await initPromise; } catch { /* the failed init left nothing to close */ }
+    }
     if (db) {
       closing = true;
       try { await db.close(); } catch { /* ignore */ }
@@ -107,6 +112,11 @@ export function getCurrentDbUserId(): string | null {
  * Logout sırasında DB bağlantısını kapat
  */
 export async function closePGlite(): Promise<void> {
+  // Logout during an init: wait for it, otherwise the database stays open (and a later
+  // query would reopen it under no user).
+  if (!db && initPromise) {
+    try { await initPromise; } catch { /* nothing opened */ }
+  }
   if (db) {
     closing = true;
     try { await db.close(); } catch { /* ignore */ }

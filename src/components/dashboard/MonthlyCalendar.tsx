@@ -30,6 +30,11 @@ export const MonthlyCalendar = ({ selectedDate, onDateSelect }: MonthlyCalendarP
   const [currentMonth, setCurrentMonth] = useState<Date>(startOfMonth(selectedDate));
   const [appointmentCounts, setAppointmentCounts] = useState<DayAppointmentCount>({});
 
+  // Follow the selected day when it moves to another month (day arrows, "Bugün").
+  useEffect(() => {
+    setCurrentMonth((month) => (isSameMonth(month, selectedDate) ? month : startOfMonth(selectedDate)));
+  }, [selectedDate]);
+
   useEffect(() => {
     fetchMonthlyAppointments();
   }, [currentMonth]);

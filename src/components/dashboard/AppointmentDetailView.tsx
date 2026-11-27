@@ -13,6 +13,7 @@ import { ArrowLeft, Plus, Stethoscope, Save, Calendar, Clock, Trash2, Loader2, F
 import { format } from "date-fns";
 import { tr } from "date-fns/locale";
 import { useAppointment } from "@/viewmodels/useAppointment";
+import { LoadError } from "@/components/LoadError";
 
 interface AppointmentDetailViewProps {
   appointmentId: string;
@@ -27,6 +28,17 @@ export const AppointmentDetailView = ({ appointmentId, patientId, onBack }: Appo
     return (
       <div className="flex items-center justify-center h-64">
         <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (vm.error && !vm.appointment) {
+    return (
+      <div className="space-y-4">
+        <LoadError message={vm.error} onRetry={vm.refresh} />
+        <div className="text-center">
+          <Button variant="outline" onClick={onBack}>Geri Dön</Button>
+        </div>
       </div>
     );
   }

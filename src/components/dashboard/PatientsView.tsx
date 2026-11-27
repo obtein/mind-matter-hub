@@ -14,6 +14,7 @@ import { format } from "date-fns";
 import { tr } from "date-fns/locale";
 import { usePatients } from "@/viewmodels/usePatients";
 import { localDateString } from "@/lib/validation";
+import { LoadError } from "@/components/LoadError";
 
 interface PatientsViewProps {
   onPatientSelect: (patientId: string) => void;
@@ -200,7 +201,9 @@ export const PatientsView = ({ onPatientSelect }: PatientsViewProps) => {
         )}
       </div>
 
-      {vm.patients.length === 0 && vm.searchTerm.trim().length < 1 ? (
+      {vm.error && vm.patients.length === 0 ? (
+        <LoadError message={vm.error} onRetry={vm.refresh} />
+      ) : vm.patients.length === 0 && vm.searchTerm.trim().length < 1 ? (
         <Card className="border-dashed">
           <CardContent className="flex flex-col items-center justify-center py-12">
             <User className="w-12 h-12 text-muted-foreground/50 mb-4" />

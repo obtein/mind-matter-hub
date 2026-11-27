@@ -108,6 +108,8 @@ export function usePatientDetail(patientId: string) {
         const appointmentIds = appointmentsData.map((a) => a.id);
         const medsData = await medicationRepo.getByAppointmentIds(appointmentIds);
         setMedications(medsData);
+      } else {
+        setMedications([]);
       }
     } catch (error: unknown) {
       toast.error(error instanceof Error ? error.message : "Veriler yüklenemedi");
@@ -148,7 +150,8 @@ export function usePatientDetail(patientId: string) {
           setConflictWarning(null);
         }
       } catch {
-        // Conflict check is non-critical
+        // Fail closed: an unreadable calendar must not look like a free slot.
+        setConflictWarning("Çakışma kontrolü yapılamadı. Lütfen tekrar deneyin.");
       } finally {
         setCheckingConflict(false);
       }
@@ -207,6 +210,12 @@ export function usePatientDetail(patientId: string) {
         );
         if (isNaN(appointmentDateTime.getTime())) {
           toast.error("Geçersiz tarih veya saat formatı");
+          return;
+        }
+        // <input type="date"> accepts 6-digit years (the 20022 typo once broke the cloud sync).
+        const year = appointmentDateTime.getFullYear();
+        if (year < 2000 || year > 2100) {
+          toast.error("Randevu yılı 2000 ile 2100 arasında olmalıdır");
           return;
         }
         // Past times are allowed on purpose: sessions are recorded after they take place.

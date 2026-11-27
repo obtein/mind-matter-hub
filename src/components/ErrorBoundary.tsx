@@ -48,10 +48,19 @@ export class ErrorBoundary extends React.Component<Props, State> {
           </p>
           <button
             onClick={() => {
-              // Reset error state first, then navigate to root
+              // Re-render in place first; a full reload would land on the same screen again.
               this.setState({ hasError: false, error: null });
-              window.location.href = "/";
             }}
+            style={{
+              padding: "0.75rem 1.5rem", background: "transparent", color: "#e2e8f0",
+              border: "1px solid #475569", borderRadius: "0.5rem", cursor: "pointer",
+              fontSize: "1rem", marginBottom: "0.75rem",
+            }}
+          >
+            Tekrar Dene
+          </button>
+          <button
+            onClick={() => window.location.reload()}
             style={{
               padding: "0.75rem 1.5rem", background: "#3b82f6", color: "white",
               border: "none", borderRadius: "0.5rem", cursor: "pointer",

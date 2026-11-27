@@ -56,18 +56,26 @@ async function sendHeartbeat(): Promise<void> {
   }
 }
 
+let firstTimeoutId: ReturnType<typeof setTimeout> | null = null;
+
 export function startHeartbeat(): void {
   if (intervalId) return;
   // First heartbeat after 3 seconds (user must be set by then)
-  setTimeout(sendHeartbeat, 3000);
+  firstTimeoutId = setTimeout(sendHeartbeat, 3000);
   intervalId = setInterval(sendHeartbeat, HEARTBEAT_INTERVAL);
 }
 
 export function stopHeartbeat(): void {
+  if (firstTimeoutId) {
+    clearTimeout(firstTimeoutId);
+    firstTimeoutId = null;
+  }
   if (intervalId) {
     clearInterval(intervalId);
     intervalId = null;
   }
+  // The next login sets its own user; never send a heartbeat for the previous one.
+  setHeartbeatUser(null);
 }
 
 declare const __APP_VERSION__: string;

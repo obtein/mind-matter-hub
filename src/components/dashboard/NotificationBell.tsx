@@ -23,6 +23,8 @@ interface Notification {
   related_patient_id: string | null;
 }
 
+const REMINDER_CHECK_MS = 60_000;
+
 export const NotificationBell = () => {
   const db = useDb();
   const [notifications, setNotifications] = useState<Notification[]>([]);
@@ -32,20 +34,25 @@ export const NotificationBell = () => {
 
   useEffect(() => {
     fetchNotifications();
-    checkUpcomingAppointments();
+    void checkDueReminders();
+    // Reminder times pass while the app stays open all day: check every minute.
+    const timer = setInterval(() => void checkDueReminders(), REMINDER_CHECK_MS);
 
     const sub = db.subscribeToNotifications(() => fetchNotifications());
 
     return () => {
+      clearInterval(timer);
       sub.unsubscribe();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const fetchNotifications = async () => {
     try {
-      const data = await db.getNotifications(20);
+      const [data, unread] = await Promise.all([db.getNotifications(20), db.countUnreadNotifications()]);
       setNotifications(data || []);
-      setUnreadCount(data?.filter((n) => !n.is_read).length || 0);
+      // Counted in the database: the list shows only the newest 20.
+      setUnreadCount(unread);
     } catch {
       // Silent - notifications are non-critical
     } finally {
@@ -53,45 +60,39 @@ export const NotificationBell = () => {
     }
   };
 
-  const checkUpcomingAppointments = async () => {
+  const checkDueReminders = async () => {
     try {
       // Owner of the open local database; no network call.
       const userId = db.getCurrentUserId();
       if (!userId) return;
 
-      const now = new Date();
-      const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+      const now = new Date().toISOString();
+      const due = await db.getDueReminders(now);
+      if (due.length === 0) return;
 
-      const appointments = await db.getUpcomingAppointments(now.toISOString(), tomorrow.toISOString());
+      const existing = await db.getNotificationsByAppointmentIds(due.map((r) => r.appointment_id));
+      const notified = new Set(existing.map((n) => n.related_appointment_id));
 
-      const appointmentIds = appointments?.map((a) => a.id) || [];
-      if (appointmentIds.length === 0) return;
-
-      const existingNotifications = await db.getNotificationsByAppointmentIds(appointmentIds);
-
-      const existingAppointmentIds = new Set(
-        existingNotifications?.map((n) => n.related_appointment_id) || []
-      );
-
-      for (const apt of appointments || []) {
-        if (!existingAppointmentIds.has(apt.id)) {
-          const patientName = apt.patients?.full_name || "Hasta";
-          const aptTime = format(new Date(apt.appointment_date), "HH:mm", { locale: tr });
-          const aptDate = format(new Date(apt.appointment_date), "d MMMM", { locale: tr });
-
+      for (const r of due) {
+        if (!notified.has(r.appointment_id)) {
+          const aptTime = format(new Date(r.appointment_date), "HH:mm", { locale: tr });
+          const aptDate = format(new Date(r.appointment_date), "d MMMM", { locale: tr });
           await db.createNotification({
             user_id: userId,
             title: "Yaklaşan Randevu",
-            message: `${patientName} - ${aptDate} saat ${aptTime}`,
+            message: `${r.patient_full_name || "Hasta"} - ${aptDate} saat ${aptTime}`,
             type: "reminder",
-            related_appointment_id: apt.id,
+            related_appointment_id: r.appointment_id,
           });
+          notified.add(r.appointment_id);
         }
+        // Marked even when a notification already exists, so a deleted one never returns.
+        await db.markReminderSent(r.reminder_id, now);
       }
 
       fetchNotifications();
     } catch {
-      // Silent - notification creation is non-critical
+      // Silent - reminders retry on the next minute
     }
   };
 
