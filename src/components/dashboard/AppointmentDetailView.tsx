@@ -175,7 +175,7 @@ export const AppointmentDetailView = ({ appointmentId, patientId, onBack }: Appo
               Randevu Bilgileri
             </CardTitle>
             <div className="flex items-center gap-2">
-              <Select value={vm.status} onValueChange={vm.setStatus}>
+              <Select value={vm.status} onValueChange={(value) => void vm.changeStatus(value)}>
                 <SelectTrigger className="w-40">
                   <SelectValue />
                 </SelectTrigger>
@@ -226,10 +226,15 @@ export const AppointmentDetailView = ({ appointmentId, patientId, onBack }: Appo
               <FileText className="w-5 h-5 text-primary" />
               Seans Notları
             </CardTitle>
-            <Button onClick={vm.saveNotes} disabled={vm.saving} size="sm">
-              <Save className="w-4 h-4 mr-2" />
-              {vm.saving ? "Kaydediliyor..." : "Kaydet"}
-            </Button>
+            <div className="flex items-center gap-3">
+              <span className="text-xs text-muted-foreground">
+                {vm.notesDirty ? "Kaydedilmemiş değişiklik — otomatik kaydedilecek" : "Otomatik kaydediliyor"}
+              </span>
+              <Button onClick={vm.saveNotes} disabled={vm.saving} size="sm">
+                <Save className="w-4 h-4 mr-2" />
+                {vm.saving ? "Kaydediliyor..." : "Kaydet"}
+              </Button>
+            </div>
           </div>
         </CardHeader>
         <CardContent>

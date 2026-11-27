@@ -3,7 +3,8 @@ import { useDb } from "@/services/ServiceContext";
 import { AppointmentRepository } from "@/repositories/AppointmentRepository";
 import { toast } from "sonner";
 import { handleError } from "@/lib/errorHandler";
-import { addDays, subDays, isSameDay, parseISO } from "date-fns";
+import { addDays, subDays, isSameDay } from "date-fns";
+import { appointmentsForHour, scheduleHours } from "@/lib/schedule";
 
 export interface ScheduleAppointment {
   id: string;
@@ -14,8 +15,6 @@ export interface ScheduleAppointment {
   status: string;
   patients: { full_name: string } | null;
 }
-
-export const HOURS = Array.from({ length: 13 }, (_, i) => i + 8); // 08:00 - 20:00
 
 export function useSchedule() {
   const db = useDb();
@@ -69,18 +68,10 @@ export function useSchedule() {
     setSelectedDate(date);
   }, []);
 
-  const getAppointmentForHour = useCallback(
-    (hour: number): ScheduleAppointment | undefined => {
-      return appointments.find((apt) => {
-        try {
-          if (!apt.appointment_date) return false;
-          const aptDate = parseISO(apt.appointment_date);
-          return aptDate.getHours() === hour;
-        } catch {
-          return false;
-        }
-      });
-    },
+  const hours = useMemo(() => scheduleHours(appointments), [appointments]);
+
+  const getAppointmentsForHour = useCallback(
+    (hour: number): ScheduleAppointment[] => appointmentsForHour(appointments, hour),
     [appointments]
   );
 
@@ -102,7 +93,8 @@ export function useSchedule() {
     goToNextDay,
     goToToday,
     handleDateSelect,
-    getAppointmentForHour,
+    hours,
+    getAppointmentsForHour,
     refresh: fetchAppointments,
   };
 }

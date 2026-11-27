@@ -7,6 +7,9 @@ import { ReminderRepository } from "@/repositories/ReminderRepository";
 import { toast } from "sonner";
 import { handleError } from "@/lib/errorHandler";
 import { checkAppointmentConflict } from "@/lib/appointmentUtils";
+import { registerPendingSave } from "@/lib/pending-saves";
+
+const NOTES_AUTOSAVE_MS = 1500;
 
 export interface AppointmentInfo {
   id: string;
@@ -190,17 +193,74 @@ export function useAppointment(appointmentId: string, patientId: string) {
     db,
   ]);
 
+  // Notes save themselves: after a short pause, when the view unmounts, and before the
+  // window closes or the user logs out (flushPendingSaves). savedNotesRef holds the value
+  // known to be in the database; notesRef always holds the latest typed value.
+  const savedNotesRef = useRef<string | null>(null);
+  const [savedNotes, setSavedNotesState] = useState<string | null>(null);
+  const markSaved = useCallback((value: string) => {
+    savedNotesRef.current = value;
+    setSavedNotesState(value);
+  }, []);
+  const notesRef = useRef(notes);
+  notesRef.current = notes;
+  const notesDirty = savedNotes !== null && notes !== savedNotes;
+
+  const persistNotes = useCallback(async () => {
+    const value = notesRef.current;
+    if (savedNotesRef.current === null || value === savedNotesRef.current) return;
+    await appointmentRepo.update(appointmentId, { notes: value });
+    markSaved(value);
+  }, [appointmentId, appointmentRepo, markSaved]);
+
+  useEffect(() => {
+    // Only the first loaded value counts as saved; later edits are dirty.
+    if (!loading && savedNotesRef.current === null) markSaved(notesRef.current);
+  }, [loading, markSaved]);
+
+  useEffect(() => {
+    if (!notesDirty) return;
+    const timer = setTimeout(() => {
+      persistNotes().catch(() => toast.error("Notlar otomatik kaydedilemedi"));
+    }, NOTES_AUTOSAVE_MS);
+    return () => clearTimeout(timer);
+  }, [notes, notesDirty, persistNotes]);
+
+  useEffect(() => {
+    const unregister = registerPendingSave(persistNotes);
+    return () => {
+      unregister();
+      void persistNotes().catch(() => toast.error("Notlar kaydedilemedi"));
+    };
+  }, [persistNotes]);
+
+  const changeStatus = useCallback(
+    async (next: string) => {
+      const previous = status;
+      setStatus(next);
+      try {
+        await appointmentRepo.update(appointmentId, { status: next });
+        toast.success("Durum kaydedildi");
+      } catch {
+        setStatus(previous);
+        toast.error("Durum kaydedilemedi");
+      }
+    },
+    [appointmentId, appointmentRepo, status],
+  );
+
   const saveNotes = useCallback(async () => {
     setSaving(true);
     try {
       await appointmentRepo.update(appointmentId, { notes, status });
+      markSaved(notes);
       toast.success("Kaydedildi");
     } catch (error: unknown) {
       toast.error(error instanceof Error ? error.message : "Kaydedilemedi");
     } finally {
       setSaving(false);
     }
-  }, [appointmentId, notes, status, appointmentRepo]);
+  }, [appointmentId, notes, status, appointmentRepo, markSaved]);
 
   const addMedication = useCallback(
     async (e?: React.FormEvent) => {
@@ -365,6 +425,8 @@ export function useAppointment(appointmentId: string, patientId: string) {
 
     // Actions
     saveNotes,
+    changeStatus,
+    notesDirty,
     addMedication,
     deleteMedication,
     createNewAppointment,

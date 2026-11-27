@@ -8,6 +8,7 @@ import { ReminderRepository } from "@/repositories/ReminderRepository";
 import { toast } from "sonner";
 import { handleError } from "@/lib/errorHandler";
 import { checkAppointmentConflict } from "@/lib/appointmentUtils";
+import { matchesText, searchKey } from "@/lib/search";
 
 export interface PatientInfo {
   id: string;
@@ -160,9 +161,7 @@ export function usePatientDetail(patientId: string) {
   // Filter diagnoses based on search and date
   const filteredDiagnoses = useMemo(() => {
     return medications.filter((med) => {
-      const matchesSearch = med.medication_name
-        .toLowerCase()
-        .includes(diagSearchTerm.toLowerCase());
+      const matchesSearch = matchesText(med.medication_name, diagSearchTerm);
 
       let matchesDate = true;
       if (diagDateFilter && med.appointment_date) {
@@ -181,8 +180,8 @@ export function usePatientDetail(patientId: string) {
     (index: number): boolean => {
       if (index >= filteredDiagnoses.length - 1) return false;
       return (
-        filteredDiagnoses[index].medication_name !==
-        filteredDiagnoses[index + 1].medication_name
+        searchKey(filteredDiagnoses[index].medication_name) !==
+        searchKey(filteredDiagnoses[index + 1].medication_name)
       );
     },
     [filteredDiagnoses]

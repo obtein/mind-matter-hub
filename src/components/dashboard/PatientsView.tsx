@@ -13,6 +13,7 @@ import { Plus, Search, User, Phone, Trash2, Edit, Loader2, ChevronRight, MapPin,
 import { format } from "date-fns";
 import { tr } from "date-fns/locale";
 import { usePatients } from "@/viewmodels/usePatients";
+import { localDateString } from "@/lib/validation";
 
 interface PatientsViewProps {
   onPatientSelect: (patientId: string) => void;
@@ -89,7 +90,7 @@ export const PatientsView = ({ onPatientSelect }: PatientsViewProps) => {
                   <Input
                     id="date_of_birth" type="date"
                     min="1900-01-01"
-                    max={new Date().toISOString().slice(0, 10)}
+                    max={localDateString()}
                     value={vm.formData.date_of_birth}
                     onChange={(e) => vm.setFormData({ ...vm.formData, date_of_birth: e.target.value })}
                   />
@@ -171,12 +172,12 @@ export const PatientsView = ({ onPatientSelect }: PatientsViewProps) => {
       <div className="flex items-center justify-between px-4 py-3 bg-muted/50 rounded-lg border">
         <div className="flex items-center gap-2 text-sm">
           <User className="w-4 h-4 text-muted-foreground" />
-          {vm.searchTerm.length >= 2 ? (
+          {vm.searchTerm.trim().length >= 1 ? (
             <>
-              <span className="font-medium">{Math.min(vm.filteredPatients.length, 20)}</span>
+              <span className="font-medium">{vm.displayedPatients.length}</span>
               <span className="text-muted-foreground">
-                {vm.filteredPatients.length > 20
-                  ? `/ ${vm.filteredPatients.length} sonuç (ilk 20 gösteriliyor)`
+                {vm.hasMore
+                  ? `/ ${vm.filteredPatients.length} sonuç`
                   : `/ ${vm.patients.length} hasta`}
               </span>
             </>
@@ -199,7 +200,7 @@ export const PatientsView = ({ onPatientSelect }: PatientsViewProps) => {
         )}
       </div>
 
-      {vm.patients.length === 0 && vm.searchTerm.length < 2 ? (
+      {vm.patients.length === 0 && vm.searchTerm.trim().length < 1 ? (
         <Card className="border-dashed">
           <CardContent className="flex flex-col items-center justify-center py-12">
             <User className="w-12 h-12 text-muted-foreground/50 mb-4" />
@@ -210,12 +211,12 @@ export const PatientsView = ({ onPatientSelect }: PatientsViewProps) => {
             </Button>
           </CardContent>
         </Card>
-      ) : vm.searchTerm.length < 2 ? (
+      ) : vm.searchTerm.trim().length < 1 ? (
         <Card className="border-dashed">
           <CardContent className="flex flex-col items-center justify-center py-12">
             <Search className="w-12 h-12 text-muted-foreground/50 mb-4" />
             <p className="text-muted-foreground text-center">Hasta aramak için yukarıdaki arama kutusunu kullanın</p>
-            <p className="text-sm text-muted-foreground mt-1">En az 2 karakter yazın</p>
+            <p className="text-sm text-muted-foreground mt-1">İsim veya telefon yazın</p>
           </CardContent>
         </Card>
       ) : vm.filteredPatients.length === 0 ? (
@@ -227,11 +228,11 @@ export const PatientsView = ({ onPatientSelect }: PatientsViewProps) => {
         </Card>
       ) : (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {vm.filteredPatients.slice(0, 20).map((patient, index) => (
+          {vm.displayedPatients.map((patient, index) => (
             <Card
               key={patient.id}
               className="group hover:shadow-medium transition-all duration-300 animate-slide-up cursor-pointer"
-              style={{ animationDelay: `${index * 50}ms` }}
+              style={{ animationDelay: `${Math.min(index, 20) * 50}ms` }}
               onClick={() => { if (patient.id) onPatientSelect(patient.id); }}
             >
               <CardHeader className="pb-3">
@@ -283,6 +284,11 @@ export const PatientsView = ({ onPatientSelect }: PatientsViewProps) => {
               </CardContent>
             </Card>
           ))}
+          {vm.hasMore && (
+            <div className="md:col-span-2 lg:col-span-3 flex justify-center">
+              <Button variant="outline" onClick={vm.loadMore}>Daha fazla göster</Button>
+            </div>
+          )}
         </div>
       )}
 

@@ -38,6 +38,8 @@ export const DashboardSidebar = ({ viewState, setViewState, user }: DashboardSid
 
   const handleLogout = async () => {
     try {
+      const { flushPendingSaves } = await import("@/lib/pending-saves");
+      await flushPendingSaves();
       const { hasSyncCredentials, syncToSupabase } = await import("@/services/supabase-sync");
       if (!auth.isOfflineSession() && (await hasSyncCredentials())) {
         toast.info("Veriler yedekleniyor...", { id: "logout-sync" });

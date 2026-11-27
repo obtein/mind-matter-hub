@@ -18,6 +18,8 @@ export const AutoSync = () => {
           event.preventDefault();
 
           try {
+            const { flushPendingSaves } = await import("@/lib/pending-saves");
+            await flushPendingSaves();
             const { hasSyncCredentials, syncToSupabase } = await import("@/services/supabase-sync");
 
             if (await hasSyncCredentials()) {

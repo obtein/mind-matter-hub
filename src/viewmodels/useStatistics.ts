@@ -27,6 +27,8 @@ export interface Stats {
   totalPatients: number;
   totalAppointments: number;
   completedAppointments: number;
+  /** Not cancelled and already started; the base of the completion rate. */
+  pastAppointments: number;
   patientsWithDob: number;
   genderDistribution: GenderDistributionItem[];
   ageDistribution: AgeDistributionItem[];
@@ -45,7 +47,7 @@ export const AGE_COLORS: Record<string, string> = {
   "18-30": "#3b82f6",
   "31-45": "#f59e0b",
   "46-60": "#ef4444",
-  "60+": "#8b5cf6",
+  "61+": "#8b5cf6",
 };
 
 function calculateAge(dateOfBirth: string): number {
@@ -93,7 +95,7 @@ export function useStatistics() {
         "18-30": 0,
         "31-45": 0,
         "46-60": 0,
-        "60+": 0,
+        "61+": 0,
       };
 
       patients?.forEach((p) => {
@@ -103,7 +105,7 @@ export function useStatistics() {
           else if (age <= 30) ageGroups["18-30"]++;
           else if (age <= 45) ageGroups["31-45"]++;
           else if (age <= 60) ageGroups["46-60"]++;
-          else ageGroups["60+"]++;
+          else ageGroups["61+"]++;
         }
       });
 
@@ -112,17 +114,21 @@ export function useStatistics() {
         .map(([name, value]) => ({ name, value }));
 
       // Calculate monthly appointments for the last 6 months
+      // Cancelled appointments are not workload; they are left out of every count.
+      const active = (appointments ?? []).filter((a) => a.status !== "cancelled");
+      const now = new Date();
+      const pastActive = active.filter((a) => new Date(a.appointment_date) <= now).length;
+
       const monthlyAppointments: MonthlyAppointmentItem[] = [];
       for (let i = 5; i >= 0; i--) {
         const monthDate = subMonths(new Date(), i);
         const monthStart = startOfMonth(monthDate);
         const monthEnd = endOfMonth(monthDate);
 
-        const count =
-          appointments?.filter((a) => {
-            const aptDate = new Date(a.appointment_date);
-            return aptDate >= monthStart && aptDate <= monthEnd;
-          }).length || 0;
+        const count = active.filter((a) => {
+          const aptDate = new Date(a.appointment_date);
+          return aptDate >= monthStart && aptDate <= monthEnd;
+        }).length;
 
         monthlyAppointments.push({
           month: format(monthDate, "MMM", { locale: tr }),
@@ -137,8 +143,9 @@ export function useStatistics() {
 
       setStats({
         totalPatients: patients?.length || 0,
-        totalAppointments: appointments?.length || 0,
+        totalAppointments: active.length,
         completedAppointments,
+        pastAppointments: pastActive,
         patientsWithDob,
         genderDistribution,
         ageDistribution,
@@ -156,8 +163,9 @@ export function useStatistics() {
   }, [fetchStats]);
 
   const completionRate = useMemo(() => {
-    if (!stats || stats.totalAppointments === 0) return 0;
-    return Math.round((stats.completedAppointments / stats.totalAppointments) * 100);
+    // Only appointments whose time has passed can be completed.
+    if (!stats || stats.pastAppointments === 0) return 0;
+    return Math.round((stats.completedAppointments / stats.pastAppointments) * 100);
   }, [stats]);
 
   return {

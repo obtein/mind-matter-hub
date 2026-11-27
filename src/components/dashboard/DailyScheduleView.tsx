@@ -4,7 +4,7 @@ import { ChevronLeft, ChevronRight, Clock, User, Loader2 } from "lucide-react";
 import { format } from "date-fns";
 import { tr } from "date-fns/locale";
 import { MonthlyCalendar } from "./MonthlyCalendar";
-import { useSchedule, HOURS } from "@/viewmodels/useSchedule";
+import { useSchedule } from "@/viewmodels/useSchedule";
 
 interface DailyScheduleViewProps {
   onAppointmentSelect?: (appointmentId: string, patientId: string) => void;
@@ -69,8 +69,8 @@ export const DailyScheduleView = ({ onAppointmentSelect }: DailyScheduleViewProp
         </div>
       ) : (
       <div className="space-y-2">
-        {HOURS.map((hour) => {
-          const appointment = vm.getAppointmentForHour(hour);
+        {vm.hours.map((hour) => {
+          const hourAppointments = vm.getAppointmentsForHour(hour);
           const timeString = `${hour.toString().padStart(2, "0")}:00`;
           const currentHour = new Date().getHours();
           const isPast = vm.isToday && hour < currentHour;
@@ -90,8 +90,11 @@ export const DailyScheduleView = ({ onAppointmentSelect }: DailyScheduleViewProp
               </div>
 
               <div className="flex-1">
-                {appointment ? (
+                {hourAppointments.length > 0 ? (
+                  <div className="space-y-2">
+                  {hourAppointments.map((appointment) => (
                   <Card
+                    key={appointment.id}
                     className={`border-l-4 cursor-pointer ${
                       appointment.status === "completed"
                         ? "border-l-green-500 bg-green-50/50 dark:bg-green-950/20"
@@ -117,7 +120,9 @@ export const DailyScheduleView = ({ onAppointmentSelect }: DailyScheduleViewProp
                             </p>
                             <div className="flex items-center gap-2 text-sm text-muted-foreground mt-1">
                               <Clock className="w-4 h-4" />
-                              <span>{appointment.duration_minutes} dakika</span>
+                              <span>
+                                {format(new Date(appointment.appointment_date), "HH:mm")} · {appointment.duration_minutes} dakika
+                              </span>
                             </div>
                             {appointment.notes && (
                               <p className="text-sm text-muted-foreground mt-2 line-clamp-1">
@@ -144,6 +149,8 @@ export const DailyScheduleView = ({ onAppointmentSelect }: DailyScheduleViewProp
                       </div>
                     </CardContent>
                   </Card>
+                  ))}
+                  </div>
                 ) : (
                   <div
                     className={`h-16 rounded-lg border border-dashed flex items-center justify-center ${

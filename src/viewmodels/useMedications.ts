@@ -3,6 +3,7 @@ import { useDb } from "@/services/ServiceContext";
 import { MedicationRepository } from "@/repositories/MedicationRepository";
 import { toast } from "sonner";
 import { handleError } from "@/lib/errorHandler";
+import { matchesText, searchKey } from "@/lib/search";
 
 export interface MedicationRecord {
   id: string;
@@ -23,6 +24,7 @@ export interface MedicationSummary {
   name: string;
   count: number;
   patients: string[];
+  patientKeys: string[];
 }
 
 export function useMedications() {
@@ -50,21 +52,24 @@ export function useMedications() {
 
   const medicationSummary = useMemo<MedicationSummary[]>(() => {
     return medications.reduce((acc, med) => {
-      const existing = acc.find(
-        (m) => m.name.toLowerCase() === med.medication_name.toLowerCase()
-      );
+      const key = searchKey(med.medication_name);
+      const existing = acc.find((m) => searchKey(m.name) === key);
       const patientName = med.appointment?.patient?.full_name || "Bilinmeyen";
+      // Two patients can share a name; count them by id when it is known.
+      const patientKey = med.appointment?.patient?.id || `name:${patientName}`;
 
       if (existing) {
         existing.count++;
-        if (!existing.patients.includes(patientName)) {
+        if (!existing.patientKeys.includes(patientKey)) {
+          existing.patientKeys.push(patientKey);
           existing.patients.push(patientName);
         }
       } else {
         acc.push({
-          name: med.medication_name,
+          name: med.medication_name.trim(),
           count: 1,
           patients: [patientName],
+          patientKeys: [patientKey],
         });
       }
       return acc;
@@ -78,10 +83,8 @@ export function useMedications() {
   const filteredMedications = useMemo(() => {
     return medications.filter(
       (med) =>
-        med.medication_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        med.appointment?.patient?.full_name
-          ?.toLowerCase()
-          .includes(searchTerm.toLowerCase())
+        matchesText(med.medication_name, searchTerm) ||
+        matchesText(med.appointment?.patient?.full_name, searchTerm)
     );
   }, [medications, searchTerm]);
 

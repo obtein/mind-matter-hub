@@ -5,6 +5,7 @@ import type { Patient, PatientInsert } from "@/services/db";
 import { toast } from "sonner";
 import { handleError } from "@/lib/errorHandler";
 import { validateDateOfBirth, validatePhone } from "@/lib/validation";
+import { matchesPhone, matchesText } from "@/lib/search";
 
 export interface PatientFormData {
   full_name: string;
@@ -63,7 +64,7 @@ export function usePatients() {
 
   const filteredPatients = useMemo(() => {
     return patients.filter((p) => {
-      const matchesSearch = p.full_name.toLowerCase().includes(searchTerm.toLowerCase()) || p.phone?.includes(searchTerm);
+      const matchesSearch = matchesText(p.full_name, searchTerm) || matchesPhone(p.phone, searchTerm);
       const matchesGender = genderFilter === "all" || p.gender === genderFilter;
       return matchesSearch && matchesGender;
     });
@@ -131,14 +132,15 @@ export function usePatients() {
       const doctorId = db.getCurrentUserId();
       if (!doctorId) throw new Error("Kullanıcı bulunamadı");
 
+      const clean = (v: string) => v.trim() || null;
       const patientData = {
-        full_name: formData.full_name,
-        phone: formData.phone || null,
+        full_name: formData.full_name.trim().replace(/\s+/g, " "),
+        phone: clean(formData.phone),
         date_of_birth: formData.date_of_birth || null,
         gender: formData.gender || null,
-        address: formData.address || null,
-        meslek: formData.meslek || null,
-        notes: formData.notes || null,
+        address: clean(formData.address),
+        meslek: clean(formData.meslek),
+        notes: clean(formData.notes),
       };
 
       if (editingPatient) {

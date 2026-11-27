@@ -164,7 +164,7 @@ export const PatientDetailView = ({ patientId, onBack, onAppointmentSelect }: Pa
               }
               const avgDays = Math.round(totalDays / (sortedVisits.length - 1));
               if (avgDays < 7) {
-                visitFrequency = `Haftada ${Math.round(7 / avgDays)} kez`;
+                visitFrequency = avgDays < 1 ? "Haftada 7+ kez" : `Haftada ${Math.round(7 / avgDays)} kez`;
               } else if (avgDays < 30) {
                 visitFrequency = `${Math.round(avgDays / 7)} haftada bir`;
               } else {

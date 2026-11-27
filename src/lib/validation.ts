@@ -3,8 +3,16 @@
 export const MIN_BIRTH_YEAR = 1900;
 
 export function validatePhone(phone: string): boolean {
-  if (!phone) return true;
-  return /^[0-9\s\-+()]{6,20}$/.test(phone);
+  const value = phone.trim();
+  if (!value) return true;
+  const digits = value.replace(/\D/g, "").length;
+  return /^[0-9\s\-+()]{6,20}$/.test(value) && digits >= 6;
+}
+
+/** Today's date as YYYY-MM-DD in the device's local time zone. */
+export function localDateString(d: Date = new Date()): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
 /**
@@ -26,7 +34,7 @@ export function validateDateOfBirth(dob: string, today: Date = new Date()): stri
   if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== dob) {
     return "Geçersiz doğum tarihi";
   }
-  if (dob > today.toISOString().slice(0, 10)) {
+  if (dob > localDateString(today)) {
     return "Doğum tarihi gelecekte olamaz";
   }
   return null;

@@ -36,3 +36,32 @@ describe("validatePhone", () => {
     expect(validatePhone("123")).toBe(false);
   });
 });
+
+// bug-hunt L6 (2026-11-27): junk phones passed; "today" was the UTC date, so between 00:00 and
+// 03:00 in Turkey a baby born today was rejected as born in the future.
+describe("validatePhone (bug-hunt L6)", () => {
+  it("rejects values without enough digits", () => {
+    expect(validatePhone("------")).toBe(false);
+    expect(validatePhone("((((((")).toBe(false);
+    expect(validatePhone("12-34-5")).toBe(false);
+  });
+  it("treats spaces-only as empty (optional field; stored as null)", () => {
+    expect(validatePhone("      ")).toBe(true);
+  });
+  it("accepts surrounding spaces", () => {
+    expect(validatePhone(" 0555 123 45 67 ")).toBe(true);
+  });
+});
+
+describe("validateDateOfBirth local today (bug-hunt L6)", () => {
+  it("accepts a birth today at 01:30 local time, when the UTC date is still yesterday", () => {
+    // 2026-11-27 01:30 in a UTC+3 zone is 2026-11-26 22:30 UTC.
+    const lateNight = new Date(2026, 10, 27, 1, 30);
+    const localToday = "2026-11-27";
+    expect(validateDateOfBirth(localToday, lateNight)).toBeNull();
+  });
+  it("handles leap days", () => {
+    expect(validateDateOfBirth("2024-02-29", today)).toBeNull();
+    expect(validateDateOfBirth("2023-02-29", today)).toBe("Geçersiz doğum tarihi");
+  });
+});

@@ -1,4 +1,5 @@
 import { PGlite } from "@electric-sql/pglite";
+import { PGLITE_OPTIONS } from "./options";
 
 let db: PGlite | null = null;
 let currentUserId: string | null = null;
@@ -47,7 +48,7 @@ export async function getPGlite(): Promise<PGlite> {
 
     let instance: PGlite;
     try {
-      instance = new PGlite(dbName);
+      instance = new PGlite(dbName, PGLITE_OPTIONS);
       await instance.waitReady;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
