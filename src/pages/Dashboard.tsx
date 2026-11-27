@@ -11,6 +11,7 @@ import { MedicationsReportView } from "@/components/dashboard/MedicationsReportV
 import { NotificationBell } from "@/components/dashboard/NotificationBell";
 import { AutoSync } from "@/components/desktop/AutoSync";
 import { DeviceServices } from "@/components/desktop/DeviceServices";
+import { OfflineAccessSetup } from "@/components/desktop/OfflineAccessSetup";
 import { setHeartbeatUser } from "@/services/heartbeat";
 import { OfflineIndicator } from "@/components/OfflineIndicator";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
@@ -20,7 +21,7 @@ import { syncFromSupabase } from "@/services/supabase-sync";
 import { remoteLog } from "@/services/remote-logger";
 import { safeGetItem, safeRemoveItem } from "@/lib/storage";
 import { toast } from "sonner";
-import { Loader2, Database, RefreshCw, CheckCircle } from "lucide-react";
+import { Loader2, Database, RefreshCw, CheckCircle, CloudOff } from "lucide-react";
 import psiTrakLogo from "/favicon.png";
 import type { AppUser } from "@/services/auth";
 
@@ -48,11 +49,13 @@ const Dashboard = () => {
   const [initPhase, setInitPhase] = useState<InitPhase>("auth");
   const [dbReady, setDbReady] = useState(false);
   const [viewState, setViewState] = useState<ViewState>({ type: "schedule" });
+  const [offline, setOffline] = useState(() => auth.isOfflineSession());
   const initStarted = useRef(false);
 
   // Phase 1: Auth check
   useEffect(() => {
     const sub = auth.onAuthStateChange((event, u) => {
+      setOffline(auth.isOfflineSession());
       if (event === "SIGNED_OUT" || !u) {
         navigate("/");
       } else {
@@ -67,7 +70,7 @@ const Dashboard = () => {
         setUser(u);
         setHeartbeatUser({ id: u.id, email: u.email || "" });
       }
-    });
+    }).catch(() => navigate("/"));
 
     return () => sub.unsubscribe();
   }, [navigate]);
@@ -108,6 +111,11 @@ const Dashboard = () => {
         // Phase 3: Sync in background (don't block UI)
         setInitPhase("sync");
         try {
+          if (auth.isOfflineSession()) {
+            // No Supabase session: sync runs after reconnect or on the next start (pending flag).
+            setInitPhase("ready");
+            return;
+          }
           const { rows } = await db.query<{ count: number }>("SELECT COUNT(*)::int as count FROM patients");
           const hasPendingSync = safeGetItem("psitrak_pending_sync") === "true";
           if ((rows[0]?.count ?? 0) === 0 || hasPendingSync) {
@@ -134,7 +142,7 @@ const Dashboard = () => {
     };
 
     initBackground();
-  }, [user]);
+  }, [user, auth]);
 
   const navigateTo = (newState: ViewState) => {
     setViewState(newState);
@@ -179,6 +187,7 @@ const Dashboard = () => {
     <SidebarProvider>
       <AutoSync />
       <DeviceServices />
+      <OfflineAccessSetup user={user} />
       <div className="min-h-screen flex w-full bg-background">
         <OfflineIndicator />
         <DashboardSidebar
@@ -190,6 +199,12 @@ const Dashboard = () => {
           <header className="flex items-center justify-between px-6 py-3 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
             <div className="flex items-center gap-2">
               <SidebarTrigger className="md:hidden" />
+              {offline && (
+                <span className="flex items-center gap-1.5 rounded-md bg-yellow-100 px-2.5 py-1 text-xs font-medium text-yellow-800">
+                  <CloudOff className="h-3.5 w-3.5" />
+                  Çevrimdışı mod — sunucuya bağlanılamıyor, veriler bu bilgisayarda kaydediliyor
+                </span>
+              )}
             </div>
             <NotificationBell />
           </header>

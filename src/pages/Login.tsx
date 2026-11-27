@@ -44,14 +44,30 @@ const Login = () => {
     setIsLoading(true);
 
     try {
-      const { error } = await auth.signIn(loginData.email, loginData.password);
+      const { error, offline, reason } = await auth.signIn(loginData.email, loginData.password);
 
       if (error) {
-        toast.error("Giriş bilgileri hatalı. Lütfen e-posta ve şifrenizi kontrol edin.");
+        if (reason === "no-offline-record") {
+          toast.error(
+            "Sunucuya ulaşılamıyor. Bu bilgisayarda çevrimdışı giriş kaydı yok. İnternet bağlantınızı kontrol edip tekrar deneyin.",
+            { duration: 10000 },
+          );
+        } else if (reason === "rejected") {
+          toast.error("Giriş yapılamadı. Lütfen biraz bekleyip tekrar deneyin.");
+        } else {
+          toast.error("Giriş bilgileri hatalı. Lütfen e-posta ve şifrenizi kontrol edin.");
+        }
         return;
       }
 
-      toast.success("Giriş başarılı!");
+      if (offline) {
+        toast.warning(
+          "Sunucuya ulaşılamadı. Çevrimdışı modda giriş yapıldı; verileriniz bu bilgisayarda. Bağlantı gelince senkronize edilecek.",
+          { duration: 10000 },
+        );
+      } else {
+        toast.success("Giriş başarılı!");
+      }
       // Hemen dashboard'a geç — DB init arka planda yapılacak
       navigate("/dashboard");
     } catch {

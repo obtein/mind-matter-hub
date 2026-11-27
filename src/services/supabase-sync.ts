@@ -11,6 +11,8 @@
 import { getPGlite } from "./pglite/init";
 import { supabase } from "@/integrations/supabase/client";
 import { remoteLog } from "./remote-logger";
+import { withTimeout } from "./offline-auth";
+import { safeSetItem } from "@/lib/storage";
 import {
   sanitizeRow,
   shouldOverwriteLocal,
@@ -119,8 +121,14 @@ export function isOnline(): boolean {
 }
 
 export async function hasSyncCredentials(): Promise<boolean> {
-  const { data: { session } } = await supabase.auth.getSession();
-  return !!session;
+  try {
+    // getSession() may refresh over the network; never let close/logout wait on a stalled server.
+    const { data: { session } } = await withTimeout(supabase.auth.getSession(), 8_000);
+    return !!session;
+  } catch {
+    safeSetItem("psitrak_pending_sync", "true");
+    return false;
+  }
 }
 
 // ── Push: local → Supabase ──

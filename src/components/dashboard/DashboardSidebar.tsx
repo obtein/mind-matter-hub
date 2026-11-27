@@ -39,7 +39,7 @@ export const DashboardSidebar = ({ viewState, setViewState, user }: DashboardSid
   const handleLogout = async () => {
     try {
       const { hasSyncCredentials, syncToSupabase } = await import("@/services/supabase-sync");
-      if (await hasSyncCredentials()) {
+      if (!auth.isOfflineSession() && (await hasSyncCredentials())) {
         toast.info("Veriler yedekleniyor...", { id: "logout-sync" });
         const result = await syncToSupabase();
         toast.dismiss("logout-sync");
