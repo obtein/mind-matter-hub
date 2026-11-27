@@ -9,8 +9,8 @@
  *    awaited auth.getUser(), which is a network request.
  * 4. Adding or deleting a diagnosis must not revert unsaved session notes.
  */
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { renderHook, act, waitFor } from "@testing-library/react";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { renderHook, act, waitFor, cleanup } from "@testing-library/react";
 import { toast } from "sonner";
 import { useAppointment } from "./useAppointment";
 import { usePatientDetail } from "./usePatientDetail";
@@ -94,6 +94,13 @@ function deferred<T>() {
   });
   return { promise, resolve };
 }
+
+// Unmount every hook so pending effect timers (the 300 ms conflict-check debounce in
+// useAppointment) are cleared before jsdom is torn down. Without it CI failed on
+// 2026-11-27 with "ReferenceError: window is not defined" after all tests had passed.
+afterEach(() => {
+  cleanup();
+});
 
 beforeEach(() => {
   db = makeDb();
