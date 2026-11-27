@@ -1,4 +1,5 @@
 import { getPGlite, getCurrentDbUserId } from "./pglite/init";
+import { deleteAppointmentCascade, deleteOne, deletePatientCascade } from "./tombstones";
 import { remoteLog } from "./remote-logger";
 
 /** PGlite returns Date objects for timestamp columns. Ensure they are ISO strings. */
@@ -131,25 +132,7 @@ export class PGliteDbService implements DbService {
 
   async deletePatient(id: string): Promise<void> {
     try {
-      const db = await getPGlite();
-      await db.query("BEGIN");
-      try {
-        await db.query(
-          "DELETE FROM session_medications WHERE appointment_id IN (SELECT id FROM appointments WHERE patient_id = $1)",
-          [id]
-        );
-        await db.query(
-          "DELETE FROM appointment_reminders WHERE appointment_id IN (SELECT id FROM appointments WHERE patient_id = $1)",
-          [id]
-        );
-        await db.query("DELETE FROM patient_notes WHERE patient_id = $1", [id]);
-        await db.query("DELETE FROM appointments WHERE patient_id = $1", [id]);
-        await db.query("DELETE FROM patients WHERE id = $1", [id]);
-        await db.query("COMMIT");
-      } catch (innerError) {
-        await db.query("ROLLBACK");
-        throw innerError;
-      }
+      await deletePatientCascade(await getPGlite(), id);
     } catch (error) {
       console.error("[db.deletePatient] failed:", error);
       remoteLog.error("db.deletePatient failed", { error: (error as Error).message });
@@ -290,8 +273,7 @@ export class PGliteDbService implements DbService {
 
   async deleteAppointment(id: string): Promise<void> {
     try {
-      const db = await getPGlite();
-      await db.query("DELETE FROM appointments WHERE id = $1", [id]);
+      await deleteAppointmentCascade(await getPGlite(), id);
     } catch (error) {
       console.error("[db.deleteAppointment] failed:", error);
       remoteLog.error("db.deleteAppointment failed", { error: (error as Error).message });
@@ -496,8 +478,7 @@ export class PGliteDbService implements DbService {
 
   async deleteMedication(id: string): Promise<void> {
     try {
-      const db = await getPGlite();
-      await db.query("DELETE FROM session_medications WHERE id = $1", [id]);
+      await deleteOne(await getPGlite(), "session_medications", id);
     } catch (error) {
       console.error("[db.deleteMedication] failed:", error);
       remoteLog.error("db.deleteMedication failed", { error: (error as Error).message });
@@ -578,8 +559,7 @@ export class PGliteDbService implements DbService {
 
   async deleteNotification(id: string): Promise<void> {
     try {
-      const db = await getPGlite();
-      await db.query("DELETE FROM notifications WHERE id = $1", [id]);
+      await deleteOne(await getPGlite(), "notifications", id);
     } catch (error) {
       console.error("[db.deleteNotification] failed:", error);
       remoteLog.error("db.deleteNotification failed", { error: (error as Error).message });

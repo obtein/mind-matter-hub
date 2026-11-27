@@ -14,21 +14,17 @@ Live project: `vhdhwnvfomwzauvqozxo` ("PsiTrak"), created 2026-03-21.
 - Files dated `202610*` and later are written by hand and are the source of truth going
   forward.
 
-## Pending: `20261012150000_lock_admin_tables_and_dedupe_policies.sql`
+## Applied: `20261012150000_lock_admin_tables_and_dedupe_policies.sql`
 
-Not yet applied (the automated apply was declined on 2026-10-12). Apply it from the
-Supabase dashboard SQL editor, then verify:
+Applied by hand from the SQL editor (it is live; verified 2026-11-27 with the query below). It
+is not listed by `list_migrations` because it did not go through the migration tool.
 
 ```sql
 select tablename, policyname, roles::text, cmd, qual, with_check
 from pg_policies where schemaname = 'public' order by 1, 4, 2;
 ```
 
-Expected after applying: no policy with `qual = true` or `with_check = true` for `anon`
-except `logs_insert` on `app_logs`; one policy per command on the patient tables; the
-function `public.is_admin()` exists.
-
-What it changes:
+What the lockdown changed:
 
 | Table | Before | After |
 |---|---|---|
@@ -42,3 +38,11 @@ What it changes:
 Clients send the user's session token for every request since app version 0.7.6, so
 this lockdown does not affect the desktop app. Clients older than 0.7.6 lose only the
 heartbeat until they update.
+
+## Applied: `20261127144626_bug_hunt_hardening.sql`
+
+Applied 2026-11-27 with the Supabase MCP `apply_migration` (listed by `list_migrations`):
+`deleted_records` tombstones (deleted rows stay as an archive, the app never pulls them back);
+non-admins may only set `status`/`executed_at` on `admin_commands` to
+executed/expired/failed/unsupported; `app_logs_size_limit` (NOT VALID) and an admin DELETE
+policy on `app_logs`; `is_admin()` no longer executable by `anon`.

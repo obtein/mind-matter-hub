@@ -37,6 +37,19 @@ async function sessionInfo(): Promise<{ token: string | null; email: string | un
   }
 }
 
+const MAX_MESSAGE = 2000;
+const MAX_CONTEXT_CHARS = 6000;
+
+function boundedContext(context?: Record<string, unknown>): Record<string, unknown> | undefined {
+  if (!context) return undefined;
+  try {
+    const text = JSON.stringify(context);
+    return text.length <= MAX_CONTEXT_CHARS ? context : { truncated: text.slice(0, MAX_CONTEXT_CHARS) };
+  } catch {
+    return { truncated: "unserialisable context" };
+  }
+}
+
 async function sendLog(entry: LogEntry): Promise<void> {
   try {
     const { token, email } = await sessionInfo();
@@ -50,6 +63,9 @@ async function sendLog(entry: LogEntry): Promise<void> {
       },
       body: JSON.stringify({
         ...entry,
+        // Server limits (app_logs_size_limit): message 2000 chars, context 8 kB.
+        message: entry.message.slice(0, MAX_MESSAGE),
+        context: boundedContext(entry.context),
         user_email: entry.user_email ?? email,
         app_version: entry.app_version || appVersion,
         platform: entry.platform || (IS_TAURI ? "desktop" : "web"),

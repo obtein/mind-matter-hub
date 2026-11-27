@@ -117,7 +117,60 @@ async function postRows(
   });
   if (res.ok) return { ok: true, status: res.status };
   const text = await res.text().catch(() => "");
-  return { ok: false, status: res.status, error: `${res.status} ${text}`.trim() };
+  return { ok: false, status: res.status, error: safeErrorText(res.status, text) };
+}
+
+/**
+ * Error text that is safe to log: PostgREST's code and message, without `details` (Postgres
+ * puts "Failing row contains (...)" there) and without quoted values, which can be patient data.
+ */
+export function safeErrorText(status: number, body: string): string {
+  try {
+    const parsed = JSON.parse(body) as { code?: unknown; message?: unknown };
+    const code = typeof parsed.code === "string" ? parsed.code : "";
+    const message = typeof parsed.message === "string" ? parsed.message.replace(/"[^"]*"/g, '"…"').slice(0, 200) : "";
+    return `${status} ${code} ${message}`.trim();
+  } catch {
+    return String(status);
+  }
+}
+
+export const PAGE_SIZE = 1000;
+
+/**
+ * Download every row of a PostgREST query. One response is capped at the server's max-rows
+ * (1000 by default), so rows are read in id order, page by page, until a short page arrives.
+ */
+export async function fetchAllPages(
+  url: string,
+  headers: Record<string, string>,
+  opts: { fetchImpl?: typeof fetch; signal?: AbortSignal; pageSize?: number } = {},
+): Promise<Row[]> {
+  const fetchImpl = opts.fetchImpl ?? fetch;
+  const pageSize = opts.pageSize ?? PAGE_SIZE;
+  const ordered = `${url}${url.includes("?") ? "&" : "?"}order=id.asc`;
+  const all: Row[] = [];
+  for (let from = 0; ; from += pageSize) {
+    const res = await fetchImpl(ordered, {
+      headers: { ...headers, "Range-Unit": "items", Range: `${from}-${from + pageSize - 1}` },
+      signal: opts.signal,
+    });
+    if (!res.ok && res.status !== 206) {
+      const text = await res.text().catch(() => "");
+      throw new Error(`indirilemedi (${safeErrorText(res.status, text)})`);
+    }
+    const page = (await res.json()) as Row[];
+    all.push(...page);
+    if (page.length < pageSize) return all;
+  }
+}
+
+/** Total from a PostgREST Content-Range header such as "0-0/1166"; null when unknown. */
+export function parseContentRangeTotal(header: string | null): number | null {
+  const total = header?.split("/")[1];
+  if (!total || total === "*") return null;
+  const n = Number(total);
+  return Number.isFinite(n) ? n : null;
 }
 
 /**

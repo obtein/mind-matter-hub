@@ -3,9 +3,12 @@ import { Users, Calendar, LogOut, BarChart3, Pill, RefreshCw, Loader2, Monitor }
 import { IS_TAURI } from "@/lib/platform";
 import { useAuth } from "@/services/ServiceContext";
 import { toast } from "sonner";
+import { safeSetItem } from "@/lib/storage";
 import type { ViewState } from "@/pages/Dashboard";
 import type { AppUser } from "@/services/auth";
 import psiTrakLogo from "/favicon.png";
+
+const LOGOUT_SYNC_TIMEOUT_MS = 20_000;
 import {
   Sidebar,
   SidebarContent,
@@ -36,25 +39,36 @@ export const DashboardSidebar = ({ viewState, setViewState, user }: DashboardSid
   const auth = useAuth();
   const [syncLoading, setSyncLoading] = useState(false);
 
+  const [loggingOut, setLoggingOut] = useState(false);
+
+  // Order matters: save pending edits, push (bounded in time), sign out (the dashboard
+  // unmounts on SIGNED_OUT), and only then close the database.
   const handleLogout = async () => {
+    if (loggingOut || syncLoading) return;
+    setLoggingOut(true);
     try {
       const { flushPendingSaves } = await import("@/lib/pending-saves");
       await flushPendingSaves();
       const { hasSyncCredentials, syncToSupabase } = await import("@/services/supabase-sync");
       if (!auth.isOfflineSession() && (await hasSyncCredentials())) {
         toast.info("Veriler yedekleniyor...", { id: "logout-sync" });
-        const result = await syncToSupabase();
+        const result = await syncToSupabase(AbortSignal.timeout(LOGOUT_SYNC_TIMEOUT_MS));
         toast.dismiss("logout-sync");
         if (!result.success) {
-          toast.warning(result.message, { duration: 10000 });
+          safeSetItem("psitrak_pending_sync", "true");
+          toast.warning(`${result.message} Veriler bu bilgisayarda; sonraki girişte yedeklenecek.`, { duration: 10000 });
         }
+      } else {
+        safeSetItem("psitrak_pending_sync", "true");
       }
+      await auth.signOut();
       const { closePGlite } = await import("@/services/pglite/init");
       await closePGlite();
-      await auth.signOut();
       toast.success("Çıkış yapıldı");
     } catch {
       toast.error("Çıkış yapılamadı");
+    } finally {
+      setLoggingOut(false);
     }
   };
 
@@ -133,7 +147,7 @@ export const DashboardSidebar = ({ viewState, setViewState, user }: DashboardSid
             <p className="text-xs text-sidebar-foreground/60 truncate">{user.email}</p>
           </div>
         </div>
-        <SidebarMenuButton onClick={handleSync} disabled={syncLoading} className="w-full mb-2">
+        <SidebarMenuButton onClick={handleSync} disabled={syncLoading || loggingOut} className="w-full mb-2">
           {syncLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <RefreshCw className="w-5 h-5" />}
           <span>Verileri Senkronize Et</span>
         </SidebarMenuButton>
@@ -145,7 +159,7 @@ export const DashboardSidebar = ({ viewState, setViewState, user }: DashboardSid
             </a>
           </SidebarMenuButton>
         )}
-        <SidebarMenuButton onClick={handleLogout} className="w-full text-destructive hover:text-destructive">
+        <SidebarMenuButton onClick={handleLogout} disabled={loggingOut || syncLoading} className="w-full text-destructive hover:text-destructive">
           <LogOut className="w-5 h-5" />
           <span>Çıkış Yap</span>
         </SidebarMenuButton>

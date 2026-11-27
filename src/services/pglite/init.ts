@@ -1,5 +1,6 @@
 import { PGlite } from "@electric-sql/pglite";
 import { PGLITE_OPTIONS } from "./options";
+import { LOCAL_MIGRATIONS_SQL } from "./migrations";
 
 let db: PGlite | null = null;
 let currentUserId: string | null = null;
@@ -138,4 +139,6 @@ async function runMigrations(pglite: PGlite) {
     CREATE INDEX IF NOT EXISTS idx_appointments_date ON appointments(appointment_date DESC);
     CREATE INDEX IF NOT EXISTS idx_patient_notes_patient_id ON patient_notes(patient_id);
   `);
+
+  await pglite.exec(LOCAL_MIGRATIONS_SQL);
 }

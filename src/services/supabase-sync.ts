@@ -14,6 +14,9 @@ import { remoteLog } from "./remote-logger";
 import { withTimeout } from "./offline-auth";
 import { safeSetItem } from "@/lib/storage";
 import {
+  fetchAllPages,
+  parseContentRangeTotal,
+  safeErrorText,
   sanitizeRow,
   shouldOverwriteLocal,
   summarizeUploads,
@@ -21,6 +24,13 @@ import {
   type Row,
   type UploadResult,
 } from "./sync-utils";
+import {
+  applyRemoteTombstones,
+  markTombstonesSynced,
+  pendingTombstones,
+  tombstonedIds,
+  type Tombstone,
+} from "./tombstones";
 import type { PGlite } from "@electric-sql/pglite";
 
 const SYNC_URL = import.meta.env.VITE_SUPABASE_URL;
@@ -45,15 +55,21 @@ function validateTableName(table: string): SyncTable {
   return table as SyncTable;
 }
 
-async function getAuthHeaders(): Promise<Record<string, string>> {
-  const { data: { session } } = await supabase.auth.getSession();
+const AUTH_TIMEOUT_MS = 15_000;
+
+/** Headers and user id from the stored session; no extra network call to the Auth server. */
+async function getAuth(): Promise<{ headers: Record<string, string>; userId: string }> {
+  const { data: { session } } = await withTimeout(supabase.auth.getSession(), AUTH_TIMEOUT_MS);
   if (!session) {
     throw new Error("Oturum bulunamadı. Lütfen tekrar giriş yapın.");
   }
   return {
-    apikey: SYNC_KEY,
-    Authorization: `Bearer ${session.access_token}`,
-    "Content-Type": "application/json",
+    userId: session.user.id,
+    headers: {
+      apikey: SYNC_KEY,
+      Authorization: `Bearer ${session.access_token}`,
+      "Content-Type": "application/json",
+    },
   };
 }
 
@@ -66,17 +82,74 @@ async function fetchTable(
   signal?: AbortSignal
 ): Promise<Row[]> {
   const safeName = validateTableName(table);
-  let url = `${SYNC_URL}/rest/v1/${safeName}?select=*`;
-  const ownerCol = safeName === "notifications" ? "user_id" : "doctor_id";
-  if (["patients", "appointments", "patient_notes", "notifications"].includes(safeName)) {
+  try {
+    return await fetchAllPages(tableUrl(safeName, userId, "*"), headers, { signal });
+  } catch (err) {
+    if (isAbort(err)) throw err;
+    throw new Error(`${safeName} ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
+function tableUrl(table: SyncTable, userId: string, select: string): string {
+  let url = `${SYNC_URL}/rest/v1/${table}?select=${select}`;
+  const ownerCol = table === "notifications" ? "user_id" : "doctor_id";
+  if (["patients", "appointments", "patient_notes", "notifications"].includes(table)) {
     url += `&${ownerCol}=eq.${encodeURIComponent(userId)}`;
   }
-  const res = await fetch(url, { headers, signal });
+  return url;
+}
+
+/** Row count on the server without downloading the table (Prefer: count=exact). */
+async function countRemote(table: SyncTable, headers: Record<string, string>, userId: string, signal?: AbortSignal): Promise<number | null> {
+  const res = await fetch(`${tableUrl(table, userId, "id")}&limit=1`, {
+    headers: { ...headers, Prefer: "count=exact" },
+    signal,
+  });
+  if (!res.ok) return null;
+  return parseContentRangeTotal(res.headers.get("Content-Range"));
+}
+
+// ── Tombstones (deleted rows) ──
+
+async function pushTombstones(db: PGlite, headers: Record<string, string>, userId: string, signal?: AbortSignal): Promise<string | null> {
+  const pending = await pendingTombstones(db);
+  if (pending.length === 0) return null;
+  const body = pending.map((t) => ({
+    doctor_id: userId,
+    table_name: t.table_name,
+    record_id: t.record_id,
+    deleted_at: t.deleted_at instanceof Date ? t.deleted_at.toISOString() : t.deleted_at,
+  }));
+  const res = await fetch(`${SYNC_URL}/rest/v1/deleted_records?on_conflict=doctor_id,table_name,record_id`, {
+    method: "POST",
+    headers: { ...headers, Prefer: "resolution=ignore-duplicates,return=minimal" },
+    body: JSON.stringify(body),
+    signal,
+  });
   if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`${safeName} indirilemedi (${res.status}): ${text.slice(0, 200)}`);
+    const error = safeErrorText(res.status, await res.text().catch(() => ""));
+    remoteLog.error("Sync tombstone upload failed", { error, count: pending.length });
+    return `Silinen ${pending.length} kayıt sunucuya bildirilemedi (${error}).`;
   }
-  return (await res.json()) as Row[];
+  await markTombstonesSynced(db, pending);
+  return null;
+}
+
+async function pullTombstones(db: PGlite, headers: Record<string, string>, userId: string, signal?: AbortSignal): Promise<string | null> {
+  try {
+    const rows = await fetchAllPages(
+      `${SYNC_URL}/rest/v1/deleted_records?select=table_name,record_id&doctor_id=eq.${encodeURIComponent(userId)}`,
+      headers,
+      { signal },
+    );
+    await applyRemoteTombstones(db, rows as unknown as Tombstone[]);
+    return null;
+  } catch (err) {
+    if (isAbort(err)) throw err;
+    const error = err instanceof Error ? err.message : String(err);
+    remoteLog.error("Sync tombstone download failed", { error });
+    return "Silinen kayıt listesi indirilemedi.";
+  }
 }
 
 async function readLocalTable(db: PGlite, table: string): Promise<Row[]> {
@@ -139,10 +212,12 @@ export async function syncToSupabase(signal?: AbortSignal): Promise<{ success: b
   }
 
   try {
-    const headers = await getAuthHeaders();
+    const { headers, userId } = await getAuth();
     const db = await getPGlite();
+    const tombstoneError = await pushTombstones(db, headers, userId, signal);
     const results = await uploadAllLocal(db, headers, signal);
     const summary = summarizeUploads(results);
+    if (tombstoneError) return { success: false, message: `${tombstoneError} ${summary.message}` };
     return { success: summary.ok, message: summary.message };
   } catch (error: unknown) {
     if (isAbort(error)) {
@@ -238,16 +313,16 @@ export async function syncFromSupabase(
   const timeoutId = setTimeout(() => controller.abort(), SYNC_TIMEOUT_MS);
 
   try {
-    const headers = await getAuthHeaders();
+    const { headers, userId } = await getAuth();
     const db = await getPGlite();
-
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      clearTimeout(timeoutId);
-      return { success: false, message: "Önce giriş yapın" };
-    }
-    const userId = user.id;
     const tables = tableSpecs(userId);
+
+    // Deletes first: local tombstones go up, cloud tombstones come down, so the pull below
+    // never re-inserts a deleted row (the cloud keeps it as an archive).
+    const tombstoneErrors = [
+      await pushTombstones(db, headers, userId, controller.signal),
+      await pullTombstones(db, headers, userId, controller.signal),
+    ].filter((m): m is string => m !== null);
 
     onProgress?.({ step: "Veriler karşılaştırılıyor...", percent: 5 });
 
@@ -266,8 +341,10 @@ export async function syncFromSupabase(
       const remoteRows = await fetchTable(t.name, headers, userId, controller.signal);
       const localRows = await readLocalTable(db, t.name);
       const localById = new Map(localRows.map((r) => [String(r.id), r]));
+      const deleted = await tombstonedIds(db, t.name);
 
       for (const remote of remoteRows) {
+        if (deleted.has(String(remote.id))) continue;
         const local = localById.get(String(remote.id));
         if (!shouldOverwriteLocal(local, remote)) continue;
         try {
@@ -300,8 +377,10 @@ export async function syncFromSupabase(
       try {
         const { rows } = await db.query<{ c: number }>(`SELECT COUNT(*)::int as c FROM ${validateTableName(t.name)}`);
         const localCount = rows[0]?.c ?? 0;
-        const remoteCount = (await fetchTable(t.name, headers, userId, controller.signal)).length;
-        if (localCount < remoteCount) {
+        const deletedCount = (await tombstonedIds(db, t.name)).size;
+        const remoteCount = await countRemote(t.name, headers, userId, controller.signal);
+        // Deleted rows stay in the cloud as an archive, so the cloud may hold more.
+        if (remoteCount !== null && localCount + deletedCount < remoteCount) {
           verification.push(`${t.name}: lokal ${localCount} / sunucu ${remoteCount}`);
         }
       } catch {
@@ -318,10 +397,11 @@ export async function syncFromSupabase(
     const pullMsg = `Lokale ${addedToLocal} yeni, ${updatedLocal} güncellenen kayıt alındı.`;
     const pullFailMsg = pullFailed > 0 ? ` ${pullFailed} sunucu kaydı lokale yazılamadı.` : "";
 
-    if (!upload.ok || pullFailed > 0) {
+    const tombstoneMsg = tombstoneErrors.length > 0 ? ` ${tombstoneErrors.join(" ")}` : "";
+    if (!upload.ok || pullFailed > 0 || tombstoneErrors.length > 0) {
       return {
         success: false,
-        message: `Senkronizasyon eksik kaldı. ${pullMsg}${pullFailMsg} ${upload.message}${verifyMsg}`,
+        message: `Senkronizasyon eksik kaldı. ${pullMsg}${pullFailMsg} ${upload.message}${tombstoneMsg}${verifyMsg}`,
       };
     }
     return {
